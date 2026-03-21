@@ -160,7 +160,9 @@ export const ProviderRegisterPage = () => {
 
         {/* Formulario */}
         <div className="p-8 bg-white shadow-xl rounded-xl">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={handleSubmit(onSubmit, (formErrors) => {
+            console.log('ERRORES DE VALIDACIÓN:', JSON.stringify(formErrors, null, 2));
+          })} className="space-y-6">
 
             {/* Información del usuario */}
             <div>
