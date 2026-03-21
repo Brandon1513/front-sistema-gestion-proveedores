@@ -173,7 +173,7 @@ export const ProviderRegisterPage = () => {
                 {...register('name')}
                 error={errors.name?.message}
                 placeholder="Juan Pérez García"
-                icon={User}
+                leftIcon={<User className="w-5 h-5 text-gray-400" />}
               />
             </div>
 
@@ -189,7 +189,7 @@ export const ProviderRegisterPage = () => {
                   {...register('business_name')}
                   error={errors.business_name?.message}
                   placeholder="Nombre completo de la empresa"
-                  icon={Building2}
+                  leftIcon={<Building2 className="w-5 h-5 text-gray-400" />}
                 />
                 <Input
                   label="RFC"
@@ -200,7 +200,7 @@ export const ProviderRegisterPage = () => {
                   placeholder="DGO140717J82 o ABCD800101XY0"
                   maxLength={13}
                   style={{ textTransform: 'uppercase' }}
-                  icon={FileText}
+                  leftIcon={<FileText className="w-5 h-5 text-gray-400" />}
                   helperText="12 caracteres (persona moral) o 13 (persona física)"
                 />
               </div>
@@ -219,7 +219,7 @@ export const ProviderRegisterPage = () => {
                   {...register('password')}
                   error={errors.password?.message}
                   placeholder="••••••••"
-                  icon={Lock}
+                  leftIcon={<Lock className="w-5 h-5 text-gray-400" />}
                 />
                 <Input
                   label="Confirmar Contraseña"
@@ -227,7 +227,7 @@ export const ProviderRegisterPage = () => {
                   {...register('password_confirmation')}
                   error={errors.password_confirmation?.message}
                   placeholder="••••••••"
-                  icon={Lock}
+                  leftIcon={<Lock className="w-5 h-5 text-gray-400" />}
                 />
               </div>
               <p className="mt-2 text-sm text-gray-500">La contraseña debe tener al menos 8 caracteres</p>
