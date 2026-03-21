@@ -196,14 +196,14 @@ export const ProviderRegisterPage = () => {
 
                 <Input
                   label="RFC"
-                  {...register('rfc')}
+                  {...register('rfc', {
+                    onChange: (e) => {
+                      e.target.value = e.target.value.toUpperCase();
+                    }
+                  })}
                   error={errors.rfc?.message}
                   placeholder="DGO140717J82 o ABCD800101XY0"
                   maxLength={13}
-                  // ✅ Convierte a mayúsculas mientras escribe
-                  onChange={(e) => {
-                    e.target.value = e.target.value.toUpperCase();
-                  }}
                   style={{ textTransform: 'uppercase' }}
                   icon={FileText}
                   helperText="12 caracteres (persona moral) o 13 (persona física)"
