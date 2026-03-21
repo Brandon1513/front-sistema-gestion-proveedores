@@ -8,25 +8,16 @@ import { authService } from '../../api/authService';
 import { invitationService } from '../../api/invitationService';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
-import { 
-  Building2, 
-  Mail, 
-  Lock, 
-  CheckCircle,
-  AlertCircle,
-  User,
-  FileText
+import {
+  Building2, Mail, Lock, CheckCircle,
+  AlertCircle, User, FileText
 } from 'lucide-react';
 
-// ✅ RFC corregido:
-//   - Persona moral:  12 caracteres (3 letras + 6 dígitos fecha + 3 homoclave)
-//   - Persona física: 13 caracteres (4 letras + 6 dígitos fecha + 3 homoclave)
-//   - Homoclave: letras y dígitos, puede terminar en número o letra
 const RFC_REGEX = /^([A-ZÑ&]{3,4})(\d{6})([A-Z0-9]{3})$/;
 
 const schema = yup.object({
-  name: yup.string().required('El nombre es requerido'),
-  business_name: yup.string().required('La razón social es requerida'),
+  name:                  yup.string().required('El nombre es requerido'),
+  business_name:         yup.string().required('La razón social es requerida'),
   rfc: yup.string()
     .required('El RFC es requerido')
     .min(12, 'El RFC debe tener 12 o 13 caracteres')
@@ -43,30 +34,42 @@ const schema = yup.object({
 export const ProviderRegisterPage = () => {
   const navigate = useNavigate();
   const { token } = useParams();
-  
-  const [tokenValid, setTokenValid] = useState(false);
-  const [tokenError, setTokenError] = useState('');
+
+  const [tokenValid, setTokenValid]         = useState(false);
+  const [tokenError, setTokenError]         = useState('');
   const [invitationData, setInvitationData] = useState(null);
 
-  const { isLoading: verifyingToken } = useQuery({
+  // ✅ Sin onSuccess/onError — eliminados en TanStack Query v5
+  const {
+    data:      verifyData,
+    isLoading: verifyingToken,
+    isError:   verifyIsError,
+    error:     verifyErrorObj,
+  } = useQuery({
     queryKey: ['verify-invitation', token],
-    queryFn: () => invitationService.verify(token),
-    enabled: !!token,
-    retry: false,
-    onSuccess: (data) => {
-      if (data.valid) {
-        setTokenValid(true);
-        setInvitationData(data.invitation);
-      } else {
-        setTokenError(data.message || 'Token inválido');
-        setTokenValid(false);
-      }
-    },
-    onError: (error) => {
-      setTokenError(error.response?.data?.message || 'Token inválido o expirado');
-      setTokenValid(false);
-    },
+    queryFn:  () => invitationService.verify(token),
+    enabled:  !!token,
+    retry:    false,
   });
+
+  // ✅ Verificación del token en useEffect
+  useEffect(() => {
+    if (!verifyData) return;
+    if (verifyData.valid) {
+      setTokenValid(true);
+      setInvitationData(verifyData.invitation);
+    } else {
+      setTokenError(verifyData.message || 'Token inválido');
+      setTokenValid(false);
+    }
+  }, [verifyData]);
+
+  useEffect(() => {
+    if (verifyIsError) {
+      setTokenError(verifyErrorObj?.response?.data?.message || 'Token inválido o expirado');
+      setTokenValid(false);
+    }
+  }, [verifyIsError, verifyErrorObj]);
 
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: yupResolver(schema),
@@ -82,69 +85,65 @@ export const ProviderRegisterPage = () => {
   });
 
   const onSubmit = (data) => {
-    // Asegurarse de enviar RFC en mayúsculas
     mutation.mutate({ ...data, rfc: data.rfc.toUpperCase() });
   };
 
+  // ─── Token faltante ───────────────────────────────────────────────────────
   if (!token) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-lg">
+        <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-lg text-center">
           <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full">
             <AlertCircle className="w-8 h-8 text-red-600" />
           </div>
-          <h2 className="mb-2 text-2xl font-bold text-center text-gray-900">Token Requerido</h2>
-          <p className="mb-6 text-center text-gray-600">
-            Necesita un token de invitación válido para registrarse.
-          </p>
-          <Button onClick={() => navigate('/login')} className="w-full">
-            Ir al Login
-          </Button>
+          <h2 className="mb-2 text-2xl font-bold text-gray-900">Token Requerido</h2>
+          <p className="mb-6 text-gray-600">Necesita un token de invitación válido para registrarse.</p>
+          <Button onClick={() => navigate('/login')} className="w-full">Ir al Login</Button>
         </div>
       </div>
     );
   }
 
+  // ─── Verificando token ────────────────────────────────────────────────────
   if (verifyingToken) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 border-4 border-t-4 border-gray-200 rounded-full animate-spin border-t-primary-600"></div>
+          <div className="w-16 h-16 mx-auto mb-4 border-4 border-gray-200 rounded-full animate-spin border-t-primary-600" />
           <p className="text-gray-600">Verificando invitación...</p>
         </div>
       </div>
     );
   }
 
+  // ─── Token inválido ───────────────────────────────────────────────────────
   if (tokenError) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-lg">
+        <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-lg text-center">
           <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full">
             <AlertCircle className="w-8 h-8 text-red-600" />
           </div>
-          <h2 className="mb-2 text-2xl font-bold text-center text-gray-900">Invitación Inválida</h2>
-          <p className="mb-6 text-center text-gray-600">{tokenError}</p>
-          <Button onClick={() => navigate('/login')} className="w-full" variant="secondary">
-            Ir al Login
-          </Button>
+          <h2 className="mb-2 text-2xl font-bold text-gray-900">Invitación Inválida</h2>
+          <p className="mb-6 text-gray-600">{tokenError}</p>
+          <Button onClick={() => navigate('/login')} className="w-full" variant="secondary">Ir al Login</Button>
         </div>
       </div>
     );
   }
 
+  // ─── Formulario ───────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen px-4 py-12 bg-gradient-to-br from-primary-50 to-primary-100 sm:px-6 lg:px-8">
       <div className="max-w-2xl mx-auto">
+
         {/* Header */}
         <div className="mb-8 text-center">
           <div className="flex items-center justify-center w-20 h-20 mx-auto mb-4 bg-white rounded-full shadow-lg">
             <Building2 className="w-10 h-10 text-primary-600" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Registro de Proveedor</h1>
-          <p className="mt-2 text-gray-600">
-            Complete la información para crear su cuenta en SGP
-          </p>
+          <p className="mt-2 text-gray-600">Complete la información para crear su cuenta en SGP</p>
 
           {invitationData && (
             <div className="p-3 mt-4 border border-blue-200 rounded-lg bg-blue-50">
@@ -184,7 +183,6 @@ export const ProviderRegisterPage = () => {
                 <Building2 className="w-5 h-5 mr-2 text-primary-600" />
                 Información de la Empresa
               </h3>
-
               <div className="space-y-4">
                 <Input
                   label="Razón Social"
@@ -193,13 +191,10 @@ export const ProviderRegisterPage = () => {
                   placeholder="Nombre completo de la empresa"
                   icon={Building2}
                 />
-
                 <Input
                   label="RFC"
                   {...register('rfc', {
-                    onChange: (e) => {
-                      e.target.value = e.target.value.toUpperCase();
-                    }
+                    onChange: (e) => { e.target.value = e.target.value.toUpperCase(); }
                   })}
                   error={errors.rfc?.message}
                   placeholder="DGO140717J82 o ABCD800101XY0"
@@ -217,7 +212,6 @@ export const ProviderRegisterPage = () => {
                 <Lock className="w-5 h-5 mr-2 text-primary-600" />
                 Crear Contraseña
               </h3>
-
               <div className="space-y-4">
                 <Input
                   label="Contraseña"
@@ -236,9 +230,7 @@ export const ProviderRegisterPage = () => {
                   icon={Lock}
                 />
               </div>
-              <p className="mt-2 text-sm text-gray-500">
-                La contraseña debe tener al menos 8 caracteres
-              </p>
+              <p className="mt-2 text-sm text-gray-500">La contraseña debe tener al menos 8 caracteres</p>
             </div>
 
             {/* Error del servidor */}
@@ -249,8 +241,8 @@ export const ProviderRegisterPage = () => {
                   <p className="font-medium text-red-800">Error al registrar</p>
                   <p className="text-sm text-red-600">
                     {mutation.error?.response?.data?.message ||
-                      mutation.error?.response?.data?.error ||
-                      'Ocurrió un error inesperado'}
+                     mutation.error?.response?.data?.error ||
+                     'Ocurrió un error inesperado'}
                   </p>
                 </div>
               </div>
@@ -258,29 +250,20 @@ export const ProviderRegisterPage = () => {
 
             {/* Botones */}
             <div className="flex flex-col gap-3 pt-6 border-t sm:flex-row-reverse">
-              <Button
-                type="submit"
-                loading={mutation.isPending}
-                className="flex-1 sm:flex-initial"
-              >
+              <Button type="submit" loading={mutation.isPending} className="flex-1 sm:flex-initial">
                 <CheckCircle className="w-4 h-4 mr-2" />
                 Crear Cuenta
               </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => navigate('/login')}
-                disabled={mutation.isPending}
-                className="flex-1 sm:flex-initial"
-              >
+              <Button type="button" variant="secondary" onClick={() => navigate('/login')}
+                disabled={mutation.isPending} className="flex-1 sm:flex-initial">
                 Cancelar
               </Button>
             </div>
 
             <p className="text-sm text-center text-gray-500">
               Al registrarte, aceptas nuestros{' '}
-              <a href="#" className="text-primary-600 hover:text-primary-700">Términos de Servicio</a>{' '}
-              y{' '}
+              <a href="#" className="text-primary-600 hover:text-primary-700">Términos de Servicio</a>
+              {' '}y{' '}
               <a href="#" className="text-primary-600 hover:text-primary-700">Política de Privacidad</a>
             </p>
           </form>
