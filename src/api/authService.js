@@ -15,6 +15,12 @@ export const authService = {
     const response = await api.get('/me');
     return response.data;
   },
+  
+  // ✅ AGREGA ESTA FUNCIÓN — era la que faltaba
+  registerProvider: async (data) => {
+    const response = await api.post('/register-provider', data);
+    return response.data;
+  },
 
   // ✅ Solicitar link de restablecimiento
   forgotPassword: async (email) => {
