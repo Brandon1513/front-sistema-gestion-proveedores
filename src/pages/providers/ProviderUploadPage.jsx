@@ -5,12 +5,16 @@ import { providerDashboardService } from '../../api/providerDashboardService';
 import { providerDocumentService } from '../../api/providerDocumentService';
 import { Button } from '../../components/common/Button';
 import { Select } from '../../components/common/Select';
+import { Input } from '../../components/common/Input';
 import { showToast } from '../../utils/toast';
 import { canUploadDocument } from '../../utils/documentUploadRules';
 import {
   Upload, FileText, X, CheckCircle, AlertCircle,
-  Calendar, File, Info, Lock, ShieldCheck,
+  Calendar, File, Info, Lock, Tag, Layers,
 } from 'lucide-react';
+
+// Tipos de proveedor que muestran el campo product_name
+const TYPES_WITH_PRODUCT_NAME = ['mp_me', 'sustancias_quimicas', 'insumos', 'control_plagas'];
 
 export const ProviderUploadPage = () => {
   const navigate = useNavigate();
@@ -19,11 +23,12 @@ export const ProviderUploadPage = () => {
   const preselectedDocId = searchParams.get('document');
 
   const [selectedDocType, setSelectedDocType] = useState(preselectedDocId || '');
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [issueDate, setIssueDate] = useState('');
-  const [expiryDate, setExpiryDate] = useState('');
-  const [dragActive, setDragActive] = useState(false);
-  const [uploadError, setUploadError] = useState('');
+  const [selectedFile, setSelectedFile]       = useState(null);
+  const [productName, setProductName]         = useState('');
+  const [issueDate, setIssueDate]             = useState('');
+  const [expiryDate, setExpiryDate]           = useState('');
+  const [dragActive, setDragActive]           = useState(false);
+  const [uploadError, setUploadError]         = useState('');
 
   const { data: requiredData, isLoading } = useQuery({
     queryKey: ['provider-required-documents'],
@@ -38,6 +43,7 @@ export const ProviderUploadPage = () => {
       queryClient.invalidateQueries(['provider-stats']);
       setSelectedFile(null);
       setSelectedDocType('');
+      setProductName('');
       setIssueDate('');
       setExpiryDate('');
       setUploadError('');
@@ -64,8 +70,11 @@ export const ProviderUploadPage = () => {
   }, []);
 
   const handleFileSelect = (file) => {
-    const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png',
-      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    const allowed = [
+      'application/pdf', 'image/jpeg', 'image/jpg', 'image/png',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
     if (!allowed.includes(file.type)) {
       setUploadError('Tipo de archivo no permitido. Solo PDF, imágenes y Word.');
       return;
@@ -84,16 +93,22 @@ export const ProviderUploadPage = () => {
     if (!selectedDocType) { setUploadError('Selecciona un tipo de documento'); return; }
     if (!selectedFile)    { setUploadError('Selecciona un archivo'); return; }
 
-    // ✅ Doble verificación antes de enviar
-    const selectedDoc = requiredData?.required_documents?.find(d => d.id === parseInt(selectedDocType));
+    // Validar product_name si aplica
+    if (showProductName && selectedDocInfo?.allows_multiple && !productName.trim()) {
+      setUploadError('El nombre del producto es obligatorio para este documento');
+      return;
+    }
+
+    const selectedDoc = allDocuments?.find(d => d.id === parseInt(selectedDocType));
     const { allowed, reason } = canUploadDocument(selectedDoc);
     if (!allowed) { setUploadError(reason); return; }
 
     uploadMutation.mutate({
-      file: selectedFile,
+      file:             selectedFile,
       document_type_id: selectedDocType,
-      issue_date: issueDate || null,
-      expiry_date: expiryDate || null,
+      issue_date:       issueDate  || null,
+      expiry_date:      expiryDate || null,
+      product_name:     productName.trim() || null,
     });
   };
 
@@ -101,16 +116,28 @@ export const ProviderUploadPage = () => {
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   };
 
-  // Documento seleccionado actualmente
-  const selectedDocInfo = selectedDocType
-    ? requiredData?.required_documents?.find(d => d.id === parseInt(selectedDocType))
+  // ─── Datos derivados ────────────────────────────────────────────────────────
+  const allDocuments     = requiredData?.required_documents || [];
+  const providerTypeCode = requiredData?.provider_type?.code || '';
+
+  // Separar obligatorios y recomendados para el selector
+  const requiredDocs     = allDocuments.filter(d => d.is_required);
+  const recommendedDocs  = allDocuments.filter(d => !d.is_required);
+
+  const selectedDocInfo  = selectedDocType
+    ? allDocuments.find(d => d.id === parseInt(selectedDocType))
     : null;
 
-  // ✅ Verificar si el documento seleccionado puede ser subido
   const { allowed: canUpload, reason: blockReason } = canUploadDocument(selectedDocInfo);
+
+  // Mostrar campo producto si el tipo de proveedor lo requiere
+  const showProductName = TYPES_WITH_PRODUCT_NAME.includes(providerTypeCode);
+
+  // El campo es obligatorio solo si el documento además permite múltiples
+  const productNameRequired = showProductName && selectedDocInfo?.allows_multiple;
 
   if (isLoading) {
     return (
@@ -125,6 +152,7 @@ export const ProviderUploadPage = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+
       {/* Header */}
       <div className="p-6 border-2 rounded-xl bg-gradient-to-r from-primary-50 to-pink-50 border-primary-200">
         <div className="flex items-center gap-3">
@@ -140,38 +168,64 @@ export const ProviderUploadPage = () => {
 
       <form onSubmit={handleSubmit} className="space-y-6">
 
-        {/* Selector de tipo */}
+        {/* ── Selector de tipo de documento ─────────────────────────────────── */}
         <div className="p-6 bg-white border-2 border-gray-200 shadow-sm rounded-xl">
-          <label className="flex items-center block gap-2 mb-2 text-sm font-bold text-gray-900">
+          <label className="flex items-center gap-2 mb-2 text-sm font-bold text-gray-900">
             <FileText className="w-4 h-4 text-primary-600" />
             Tipo de Documento *
           </label>
-          <Select
+
+          <select
             value={selectedDocType}
             onChange={(e) => {
               setSelectedDocType(e.target.value);
               setSelectedFile(null);
+              setProductName('');
               setUploadError('');
             }}
-            options={[
-              { value: '', label: 'Selecciona un documento...' },
-              ...(requiredData?.required_documents?.map((doc) => {
-                const { allowed } = canUploadDocument(doc);
-                return {
-                  value: doc.id,
-                  label: `${doc.name}${doc.is_required ? ' (Requerido)' : ''}${!allowed ? ' 🔒' : doc.uploaded ? ' ✓' : ''}`,
-                };
-              }) || []),
-            ]}
             required
-          />
+            className="w-full px-3 py-2 text-sm bg-white border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          >
+            <option value="">Selecciona un documento...</option>
 
-          {/* ✅ Estado del documento seleccionado */}
+            {/* Obligatorios */}
+            {requiredDocs.length > 0 && (
+              <optgroup label="── Documentación Obligatoria ──">
+                {requiredDocs.map((doc) => {
+                  const { allowed } = canUploadDocument(doc);
+                  return (
+                    <option key={doc.id} value={doc.id}>
+                      {doc.name}
+                      {doc.allows_multiple ? ' (múltiples)' : ''}
+                      {!allowed ? ' 🔒' : doc.uploaded ? ' ✓' : ''}
+                    </option>
+                  );
+                })}
+              </optgroup>
+            )}
+
+            {/* Recomendados */}
+            {recommendedDocs.length > 0 && (
+              <optgroup label="── Documentación Recomendada ──">
+                {recommendedDocs.map((doc) => {
+                  const { allowed } = canUploadDocument(doc);
+                  return (
+                    <option key={doc.id} value={doc.id}>
+                      {doc.name}
+                      {doc.allows_multiple ? ' (múltiples)' : ''}
+                      {!allowed ? ' 🔒' : doc.uploaded ? ' ✓' : ''}
+                    </option>
+                  );
+                })}
+              </optgroup>
+            )}
+          </select>
+
+          {/* Info / bloqueo del documento seleccionado */}
           {selectedDocInfo && (
-            <>
-              {/* Bloqueado */}
-              {!canUpload && (
-                <div className="p-4 mt-4 border-2 border-gray-200 rounded-xl bg-gray-50">
+            <div className="mt-4">
+              {!canUpload ? (
+                <div className="p-4 border-2 border-gray-200 rounded-xl bg-gray-50">
                   <div className="flex items-start gap-3">
                     <div className="flex items-center justify-center flex-shrink-0 bg-gray-200 rounded-lg w-9 h-9">
                       <Lock className="w-4 h-4 text-gray-500" />
@@ -182,39 +236,79 @@ export const ProviderUploadPage = () => {
                     </div>
                   </div>
                 </div>
-              )}
-
-              {/* Permitido — info del documento */}
-              {canUpload && (
-                <div className="p-4 mt-4 border-2 border-blue-200 rounded-xl bg-gradient-to-r from-blue-50 to-blue-100">
+              ) : (
+                <div className="p-4 border-2 border-blue-200 rounded-xl bg-gradient-to-r from-blue-50 to-blue-100">
                   <div className="flex items-start gap-3">
                     <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 bg-blue-500 rounded-lg shadow-md">
                       <Info className="w-4 h-4 text-white" />
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <p className="text-sm font-semibold text-blue-900">
                         {selectedDocInfo.description || 'Sin descripción adicional'}
                       </p>
-                      {selectedDocInfo.requires_expiry && (
-                        <p className="flex items-center gap-1 mt-1 text-sm text-blue-800">
-                          <AlertCircle className="w-4 h-4" />
-                          Este documento requiere fecha de vencimiento
-                        </p>
-                      )}
+                      <div className="flex flex-wrap gap-3 mt-2">
+                        {selectedDocInfo.requires_expiry && (
+                          <span className="flex items-center gap-1 text-xs font-medium text-blue-700">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            Requiere fecha de vencimiento
+                          </span>
+                        )}
+                        {selectedDocInfo.allows_multiple && (
+                          <span className="flex items-center gap-1 text-xs font-medium text-blue-700">
+                            <Layers className="w-3.5 h-3.5" />
+                            Puedes subir uno por cada producto
+                          </span>
+                        )}
+                        {!selectedDocInfo.is_required && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-300">
+                            Recomendado
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
 
-        {/* ✅ Zona de carga — deshabilitada si el documento está bloqueado */}
+        {/* ── Campo nombre del producto ──────────────────────────────────────── */}
+        {showProductName && selectedDocInfo && canUpload && (
+          <div className="p-6 bg-white border-2 border-gray-200 shadow-sm rounded-xl">
+            <label className="flex items-center gap-2 mb-1 text-sm font-bold text-gray-900">
+              <Tag className="w-4 h-4 text-primary-600" />
+              Nombre del Producto
+              {productNameRequired
+                ? <span className="text-red-500">*</span>
+                : <span className="ml-1 text-xs font-normal text-gray-400">(opcional)</span>
+              }
+            </label>
+            <p className="mb-3 text-xs text-gray-500">
+              {productNameRequired
+                ? 'Indica el nombre específico del producto al que corresponde este documento. Se subirá una ficha por cada producto.'
+                : 'Si aplica, indica el nombre del producto relacionado con este documento.'
+              }
+            </p>
+            <Input
+              placeholder="Ej. Aceite de girasol refinado, Cloro al 10%..."
+              value={productName}
+              onChange={(e) => setProductName(e.target.value)}
+              leftIcon={<Tag className="w-4 h-4 text-gray-400" />}
+              required={productNameRequired}
+              maxLength={255}
+            />
+          </div>
+        )}
+
+        {/* ── Zona drag & drop ───────────────────────────────────────────────── */}
         <div
           className={`relative p-8 border-2 border-dashed rounded-xl transition-all duration-200
             ${!selectedDocType || !canUpload ? 'opacity-50 pointer-events-none bg-gray-50' : ''}
-            ${dragActive ? 'border-primary-500 bg-primary-50 scale-[1.02]' : 'border-gray-300 bg-white hover:border-primary-300'}
-          `}
+            ${dragActive
+              ? 'border-primary-500 bg-primary-50 scale-[1.02]'
+              : 'border-gray-300 bg-white hover:border-primary-300'
+            }`}
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
           onDragOver={handleDrag}
@@ -240,7 +334,11 @@ export const ProviderUploadPage = () => {
                   <p className="text-sm text-gray-600">{formatFileSize(selectedFile.size)}</p>
                 </div>
               </div>
-              <button type="button" onClick={() => setSelectedFile(null)} className="p-2 text-red-600 rounded-lg hover:bg-red-50">
+              <button
+                type="button"
+                onClick={() => setSelectedFile(null)}
+                className="p-2 text-red-600 rounded-lg hover:bg-red-50"
+              >
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -250,7 +348,7 @@ export const ProviderUploadPage = () => {
                 <Upload className="w-10 h-10 text-primary-600" />
               </div>
               <p className="mb-2 text-xl font-bold text-gray-900">Arrastra tu archivo aquí</p>
-              <p className="mb-4 text-sm text-gray-600">o haz click para seleccionar</p>
+              <p className="mb-4 text-sm text-gray-600">o haz clic para seleccionar</p>
               <div className="inline-flex items-center gap-2 px-4 py-2 border rounded-lg bg-primary-50 border-primary-200">
                 <FileText className="w-4 h-4 text-primary-600" />
                 <p className="text-xs font-semibold text-primary-700">PDF, JPG, PNG o Word — Máximo 10MB</p>
@@ -259,7 +357,7 @@ export const ProviderUploadPage = () => {
           )}
         </div>
 
-        {/* Fechas — solo si el documento las requiere y no está bloqueado */}
+        {/* ── Fechas — solo si el documento las requiere ─────────────────────── */}
         {selectedDocInfo?.requires_expiry && canUpload && (
           <div className="p-6 bg-white border-2 border-gray-200 shadow-sm rounded-xl">
             <h3 className="flex items-center gap-2 mb-4 text-lg font-bold text-gray-900">
@@ -281,7 +379,9 @@ export const ProviderUploadPage = () => {
                 </div>
               </div>
               <div>
-                <label className="block mb-2 text-sm font-semibold text-gray-700">Fecha de Vencimiento *</label>
+                <label className="block mb-2 text-sm font-semibold text-gray-700">
+                  Fecha de Vencimiento *
+                </label>
                 <div className="relative">
                   <Calendar className="absolute w-5 h-5 text-gray-400 -translate-y-1/2 left-3 top-1/2" />
                   <input
@@ -298,7 +398,7 @@ export const ProviderUploadPage = () => {
           </div>
         )}
 
-        {/* Error */}
+        {/* ── Error ──────────────────────────────────────────────────────────── */}
         {uploadError && (
           <div className="flex items-start gap-3 p-4 border-2 border-red-200 rounded-xl bg-red-50">
             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -309,7 +409,7 @@ export const ProviderUploadPage = () => {
           </div>
         )}
 
-        {/* Botones */}
+        {/* ── Botones ────────────────────────────────────────────────────────── */}
         <div className="flex gap-3 pt-2">
           <Button
             type="submit"
@@ -321,13 +421,17 @@ export const ProviderUploadPage = () => {
           >
             Cargar Documento
           </Button>
-          <Button type="button" variant="ghost" onClick={() => navigate('/provider/documents')}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => navigate('/provider/documents')}
+          >
             Cancelar
           </Button>
         </div>
       </form>
 
-      {/* Info adicional */}
+      {/* ── Info adicional ─────────────────────────────────────────────────── */}
       <div className="p-6 border-2 border-blue-200 rounded-xl bg-blue-50">
         <div className="flex items-start gap-3">
           <div className="flex items-center justify-center flex-shrink-0 w-10 h-10 bg-blue-500 rounded-lg shadow-md">
@@ -340,6 +444,7 @@ export const ProviderUploadPage = () => {
                 'Los documentos serán revisados por el área de Calidad.',
                 'Solo puedes renovar documentos que estén vencidos o a 30 días de vencer.',
                 'Si un documento está en revisión, espera la respuesta antes de subir uno nuevo.',
+                'Para documentos con múltiples productos, sube un archivo por cada producto indicando su nombre.',
                 'Recibirás una notificación cuando sean aprobados o rechazados.',
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2">

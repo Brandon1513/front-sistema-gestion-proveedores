@@ -133,7 +133,7 @@ export const LoginPage = () => {
             </Button>
           </form>
 
-          {/* Credenciales de prueba */}
+          {/* Credenciales de prueba 
           <div className="p-4 mt-8 border bg-gradient-to-r from-primary-50 to-pink-50 rounded-xl border-primary-200">
             <p className="mb-2 text-xs font-semibold tracking-wide text-gray-700 uppercase">
               🔐 Credenciales de prueba
@@ -156,7 +156,7 @@ export const LoginPage = () => {
                 <code className="bg-white px-2 py-1 rounded font-mono text-[10px]">password</code>
               </div>
             </div>
-          </div>
+          </div>*/}
         </div>
 
         <div className="mt-6 text-xs text-center text-gray-600">
