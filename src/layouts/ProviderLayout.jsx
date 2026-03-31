@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import { CalendarDays } from 'lucide-react';
 import {
   LayoutDashboard,
   FileText,
@@ -44,6 +45,11 @@ export const ProviderLayout = () => {
       title: 'Certificaciones',
       icon: Award,
       path: '/provider/certifications',
+    },
+    {
+      title: 'Mis Citas',
+      icon: CalendarDays,
+      path: '/provider/appointments',
     },
     {
       title: 'Mi Perfil',

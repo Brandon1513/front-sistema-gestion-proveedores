@@ -4,6 +4,8 @@ import { useAuthStore } from '../stores/authStore';
 import { authService } from '../api/authService';
 import { useQuery } from '@tanstack/react-query';
 import { documentService } from '../api/documentService';
+import { PWAInstallButton } from '../components/common/PWAInstallButton';
+import { CalendarDays } from 'lucide-react';
 import { 
   LayoutDashboard, 
   Users, 
@@ -15,6 +17,7 @@ import {
   Bell,
   BarChart3,
   Send,
+  Shield, FlaskConical
 } from 'lucide-react';
 
 export const DashboardLayout = () => {
@@ -97,6 +100,25 @@ export const DashboardLayout = () => {
       href: '/invitations', 
       icon: Send,
       roles: ['super_admin', 'admin', 'compras']
+    },
+    {
+    name: 'Calendario de Citas',
+    href: '/appointments',
+    icon: CalendarDays,
+    roles: ['super_admin', 'admin', 'compras']
+    },
+    
+    {
+      name: 'Control de Acceso',
+      href: '/security/calendar',
+      icon: Shield,
+      roles: ['super_admin', 'admin', 'seguridad']
+    },
+    {
+      name: 'Recepción de Productos',
+      href: '/food-engineer',
+      icon: FlaskConical,
+      roles: ['super_admin', 'admin', 'ingeniero_alimentos']
     },
     { 
       name: 'User Management', 
@@ -210,6 +232,7 @@ export const DashboardLayout = () => {
                 </span>
               </div>
             </div>
+            <PWAInstallButton />
             <button
               onClick={handleLogout}
               className="flex items-center justify-center w-full px-4 py-3 text-sm font-medium text-white transition-all duration-200 shadow-md bg-gradient-to-r from-red-500 to-red-600 rounded-xl hover:from-red-600 hover:to-red-700 hover:shadow-lg"
