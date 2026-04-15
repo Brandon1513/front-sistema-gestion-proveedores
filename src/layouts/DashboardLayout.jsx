@@ -17,7 +17,8 @@ import {
   Bell,
   BarChart3,
   Send,
-  Shield, FlaskConical
+  Shield, FlaskConical,
+  Settings
 } from 'lucide-react';
 
 export const DashboardLayout = () => {
@@ -120,6 +121,12 @@ export const DashboardLayout = () => {
       icon: FlaskConical,
       roles: ['super_admin', 'admin', 'ingeniero_alimentos']
     },
+    {
+      name: 'Configuración',
+      href: '/settings/catalog',
+      icon: Settings,
+      roles: ['super_admin', 'admin', 'compras'],
+    },
     { 
       name: 'User Management', 
       href: '/admin/users', 
@@ -218,14 +225,14 @@ export const DashboardLayout = () => {
             {/* ✅ Clickeable — navega a /profile */}
             <div
               onClick={() => { navigate('/profile'); setSidebarOpen(false); }}
-              className="flex items-center p-3 mb-4 bg-white shadow-sm rounded-xl cursor-pointer hover:bg-primary-50 hover:shadow-md transition-all duration-200 group"
+              className="flex items-center p-3 mb-4 transition-all duration-200 bg-white shadow-sm cursor-pointer rounded-xl hover:bg-primary-50 hover:shadow-md group"
               title="Ver mi perfil"
             >
               <div className={`flex items-center justify-center w-12 h-12 rounded-full ${getRoleColor()} text-white font-bold text-lg shadow-md`}>
                 {getInitials(user?.name)}
               </div>
               <div className="flex-1 ml-3">
-                <p className="text-sm font-semibold text-gray-900 group-hover:text-primary-700 transition-colors">{user?.name}</p>
+                <p className="text-sm font-semibold text-gray-900 transition-colors group-hover:text-primary-700">{user?.name}</p>
                 <p className="text-xs text-gray-500">{user?.email}</p>
                 <span className="inline-block mt-1 px-2 py-0.5 text-xs font-medium text-primary-700 bg-primary-100 rounded-full">
                   {userRole || 'Sin rol'}
@@ -294,14 +301,14 @@ export const DashboardLayout = () => {
             {/* ✅ Clickeable — navega a /profile */}
             <div
               onClick={() => navigate('/profile')}
-              className="flex items-center p-3 mb-4 bg-white shadow-sm rounded-xl cursor-pointer hover:bg-primary-50 hover:shadow-md transition-all duration-200 group"
+              className="flex items-center p-3 mb-4 transition-all duration-200 bg-white shadow-sm cursor-pointer rounded-xl hover:bg-primary-50 hover:shadow-md group"
               title="Ver mi perfil"
             >
               <div className={`flex items-center justify-center w-12 h-12 rounded-full ${getRoleColor()} text-white font-bold text-lg shadow-md`}>
                 {getInitials(user?.name)}
               </div>
               <div className="flex-1 min-w-0 ml-3">
-                <p className="text-sm font-semibold text-gray-900 truncate group-hover:text-primary-700 transition-colors">{user?.name}</p>
+                <p className="text-sm font-semibold text-gray-900 truncate transition-colors group-hover:text-primary-700">{user?.name}</p>
                 <p className="text-xs text-gray-500 truncate">{user?.email}</p>
                 <span className="inline-block mt-1 px-2 py-0.5 text-xs font-medium text-primary-700 bg-primary-100 rounded-full">
                   {userRole || 'Sin rol'}

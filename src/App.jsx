@@ -30,6 +30,7 @@ import { ProviderAppointmentsPage } from './pages/appointments/ProviderAppointme
 import { SecurityCalendarPage } from './pages/appointments/SecurityCalendarPage';
 import { FoodEngineerPage } from './pages/appointments/FoodEngineerPage';
 import { SmartRedirect } from './components/auth/SmartRedirect';
+import { CatalogPage } from './pages/settings/CatalogPage';
 import './styles/custom-animations.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -122,6 +123,11 @@ function App() {
             <Route path="documents/validation" element={
               <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad']}>
                 <DocumentValidationPage />
+              </RoleProtectedRoute>
+            } />
+            <Route path="settings/catalog" element={
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','compras']}>
+                <CatalogPage />
               </RoleProtectedRoute>
             } />
             <Route path="profile" element={<MyProfilePage />} />

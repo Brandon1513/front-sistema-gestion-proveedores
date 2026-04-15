@@ -19,11 +19,12 @@ import { RequiredDocumentsList } from '../../components/documents/RequiredDocume
 import { providerTypeService } from '../../api/providerTypeService';
 import { useAuthStore } from '../../stores/authStore';
 import { showToast } from '../../utils/toast';
+import api from '../../api/axios';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft, Edit, Building2, MapPin, Phone, Mail, CreditCard,
   FileText, Users, Truck, Award, Plus, Trash2, Pencil,
-  AlertCircle, ShieldCheck,
+  AlertCircle, ShieldCheck, Package,
 } from 'lucide-react';
 
 const STATUS_OPTIONS = [
@@ -83,19 +84,19 @@ export const ProviderDetailPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab]                     = useState('general');
-  const [showVehicleModal, setShowVehicleModal]       = useState(false);
+  const [activeTab, setActiveTab]                           = useState('general');
+  const [showVehicleModal, setShowVehicleModal]             = useState(false);
   const [showCertificationModal, setShowCertificationModal] = useState(false);
-  const [showStatusModal, setShowStatusModal]         = useState(false);
-  const [selectedVehicle, setSelectedVehicle]         = useState(null);
-  const [selectedCertification, setSelectedCertification] = useState(null);
+  const [showStatusModal, setShowStatusModal]               = useState(false);
+  const [selectedVehicle, setSelectedVehicle]               = useState(null);
+  const [selectedCertification, setSelectedCertification]   = useState(null);
 
   const { user } = useAuthStore();
-  const userRole      = user?.roles?.[0]?.name || user?.roles?.[0] || user?.role || '';
+  const userRole       = user?.roles?.[0]?.name || user?.roles?.[0] || user?.role || '';
   const isAdminOrSuper = ['super_admin', 'admin'].includes(userRole);
-  const isCalidad     = userRole === 'calidad';
-  const isCompras     = userRole === 'compras';
-  const canEdit       = isCompras || isAdminOrSuper;
+  const isCalidad      = userRole === 'calidad';
+  const isCompras      = userRole === 'compras';
+  const canEdit        = isCompras || isAdminOrSuper;
   const canChangeStatus = isCalidad || isAdminOrSuper;
 
   const { data: provider, isLoading, error } = useQuery({
@@ -104,7 +105,7 @@ export const ProviderDetailPage = () => {
   });
   const providerData = provider?.provider || provider;
 
-  // ✅ Query de documentos para el reporte
+  // Documentos para el reporte
   const { data: docsData } = useQuery({
     queryKey: ['provider-documents', id],
     queryFn: () => documentService.getByProvider(id),
@@ -112,10 +113,21 @@ export const ProviderDetailPage = () => {
   });
   const providerDocuments = docsData?.documents || [];
 
+  // Tipos de documentos requeridos
   const { data: documentTypesData, isLoading: isLoadingDocTypes } = useQuery({
     queryKey: ['provider-document-types', providerData?.provider_type_id],
     queryFn: () => providerTypeService.getRequiredDocuments(providerData?.provider_type_id),
     enabled: !!providerData?.provider_type_id,
+  });
+
+  // ✅ Productos y servicios del catálogo
+  const { data: providerProductsData } = useQuery({
+    queryKey: ['provider-products-services', id],
+    queryFn: async () => {
+      const r = await api.get(`/providers/${id}/products-services`);
+      return r.data;
+    },
+    enabled: !!id,
   });
 
   let documentTypes = [];
@@ -125,10 +137,10 @@ export const ProviderDetailPage = () => {
   } else if (documentTypesData?.document_types) documentTypes = documentTypesData.document_types;
   else if (Array.isArray(documentTypesData)) documentTypes = documentTypesData;
 
-  const handleAddVehicle    = () => { setSelectedVehicle(null);       setShowVehicleModal(true); };
-  const handleEditVehicle   = (v) => { setSelectedVehicle(v);         setShowVehicleModal(true); };
-  const handleAddCert       = () => { setSelectedCertification(null); setShowCertificationModal(true); };
-  const handleEditCert      = (c) => { setSelectedCertification(c);   setShowCertificationModal(true); };
+  const handleAddVehicle  = () => { setSelectedVehicle(null);       setShowVehicleModal(true); };
+  const handleEditVehicle = (v) => { setSelectedVehicle(v);         setShowVehicleModal(true); };
+  const handleAddCert     = () => { setSelectedCertification(null); setShowCertificationModal(true); };
+  const handleEditCert    = (c) => { setSelectedCertification(c);   setShowCertificationModal(true); };
 
   const handleDeleteVehicle = (vehicle) => toast((t) => (
     <div className="flex flex-col gap-3">
@@ -191,7 +203,6 @@ export const ProviderDetailPage = () => {
         <Button variant="ghost" leftIcon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/providers')} className="mb-4">
           Volver a Proveedores
         </Button>
-
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="flex items-center justify-center w-16 h-16 shadow-md rounded-xl bg-gradient-primary">
@@ -202,19 +213,15 @@ export const ProviderDetailPage = () => {
               <p className="mt-1 font-mono text-sm text-gray-600">RFC: {providerData.rfc}</p>
             </div>
           </div>
-
           <div className="flex flex-wrap items-center gap-3">
             <Badge variant={STATUS_VARIANT[providerData.status] || 'info'}>
               {STATUS_LABEL[providerData.status] || providerData.status}
             </Badge>
-
-            {/* ✅ Exportar reporte completo del proveedor */}
             <ExportButtons
               label="Reporte"
               onExcelExport={() => exportProviderReportExcel(providerData, providerDocuments)}
               onPdfExport={() => exportProviderReportPDF(providerData, providerDocuments)}
             />
-
             {canChangeStatus && (
               <Button variant="secondary" leftIcon={<ShieldCheck className="w-4 h-4" />} onClick={() => setShowStatusModal(true)}>
                 Cambiar estado
@@ -246,7 +253,7 @@ export const ProviderDetailPage = () => {
           })}
         </nav>
         <div className="p-6">
-          {activeTab === 'general'        && <GeneralInfo provider={providerData} />}
+          {activeTab === 'general'        && <GeneralInfo provider={providerData} productsData={providerProductsData} />}
           {activeTab === 'contacts'       && <ContactsInfo contacts={providerData.contacts || []} />}
           {activeTab === 'vehicles'       && <VehiclesInfo vehicles={providerData.vehicles || []} onAdd={handleAddVehicle} onEdit={handleEditVehicle} onDelete={handleDeleteVehicle} canEdit={canEdit} />}
           {activeTab === 'certifications' && <CertificationsInfo certifications={providerData.certifications || []} onAdd={handleAddCert} onEdit={handleEditCert} onDelete={handleDeleteCert} canEdit={canEdit} />}
@@ -262,17 +269,110 @@ export const ProviderDetailPage = () => {
 };
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
-const GeneralInfo = ({ provider }) => (
-  <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-    <Card title="Información de la Empresa" variant="elevated"><div className="space-y-4"><InfoRow icon={Building2} label="Razón Social" value={provider.business_name} /><InfoRow label="RFC" value={provider.rfc} /><InfoRow label="Representante Legal" value={provider.legal_representative || 'N/A'} /><InfoRow label="Tipo de Proveedor" value={provider.provider_type?.name || 'N/A'} /></div></Card>
-    <Card title="Dirección" variant="elevated"><div className="space-y-4"><InfoRow icon={MapPin} label="Calle" value={`${provider.street||''} ${provider.exterior_number||''} ${provider.interior_number||''}`.trim()||'N/A'} /><InfoRow label="Colonia" value={provider.neighborhood||'N/A'} /><InfoRow label="Ciudad" value={provider.city||'N/A'} /><InfoRow label="Estado" value={provider.state||'N/A'} /><InfoRow label="Código Postal" value={provider.postal_code||'N/A'} /></div></Card>
-    <Card title="Contacto" variant="elevated"><div className="space-y-4"><InfoRow icon={Phone} label="Teléfono" value={provider.phone||'N/A'} /><InfoRow icon={Mail} label="Email" value={provider.email||'N/A'} /></div></Card>
-    <Card title="Información Bancaria" variant="elevated"><div className="space-y-4"><InfoRow icon={CreditCard} label="Banco" value={provider.bank||'N/A'} /><InfoRow label="Sucursal" value={provider.bank_branch||'N/A'} /><InfoRow label="Cuenta" value={provider.account_number||'N/A'} /><InfoRow label="CLABE" value={provider.clabe||'N/A'} /></div></Card>
-    <Card title="Información Crediticia" variant="elevated"><div className="space-y-4"><InfoRow label="Monto de Crédito" value={provider.credit_amount ? `$${parseFloat(provider.credit_amount).toLocaleString('es-MX',{minimumFractionDigits:2})}` : 'N/A'} /><InfoRow label="Días de Crédito" value={provider.credit_days ? `${provider.credit_days} días` : 'N/A'} /></div></Card>
-    <Card title="Productos y Servicios" variant="elevated"><div className="space-y-4"><div><p className="mb-1 text-sm font-semibold text-gray-700">Productos</p><p className="text-sm text-gray-600">{provider.products||'N/A'}</p></div><div><p className="mb-1 text-sm font-semibold text-gray-700">Servicios</p><p className="text-sm text-gray-600">{provider.services||'N/A'}</p></div></div></Card>
-    {provider.observations && <Card title="Observaciones" variant="elevated" className="lg:col-span-2"><p className="text-sm text-gray-600">{provider.observations}</p></Card>}
-  </div>
-);
+
+const GeneralInfo = ({ provider, productsData }) => {
+  const products    = productsData?.products || [];
+  const services    = productsData?.services || [];
+  const hasProducts = products.length > 0;
+  const hasServices = services.length > 0;
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <Card title="Información de la Empresa" variant="elevated">
+        <div className="space-y-4">
+          <InfoRow icon={Building2} label="Razón Social"        value={provider.business_name} />
+          <InfoRow                  label="RFC"                 value={provider.rfc} />
+          <InfoRow                  label="Representante Legal" value={provider.legal_representative || 'N/A'} />
+          <InfoRow                  label="Tipo de Proveedor"   value={provider.provider_type?.name || 'N/A'} />
+        </div>
+      </Card>
+
+      <Card title="Dirección" variant="elevated">
+        <div className="space-y-4">
+          <InfoRow icon={MapPin} label="Calle"         value={`${provider.street||''} ${provider.exterior_number||''} ${provider.interior_number||''}`.trim()||'N/A'} />
+          <InfoRow               label="Colonia"       value={provider.neighborhood||'N/A'} />
+          <InfoRow               label="Ciudad"        value={provider.city||'N/A'} />
+          <InfoRow               label="Estado"        value={provider.state||'N/A'} />
+          <InfoRow               label="Código Postal" value={provider.postal_code||'N/A'} />
+        </div>
+      </Card>
+
+      <Card title="Contacto" variant="elevated">
+        <div className="space-y-4">
+          <InfoRow icon={Phone} label="Teléfono" value={provider.phone||'N/A'} />
+          <InfoRow icon={Mail}  label="Email"    value={provider.email||'N/A'} />
+        </div>
+      </Card>
+
+      <Card title="Información Bancaria" variant="elevated">
+        <div className="space-y-4">
+          <InfoRow icon={CreditCard} label="Banco"    value={provider.bank||'N/A'} />
+          <InfoRow                   label="Sucursal" value={provider.bank_branch||'N/A'} />
+          <InfoRow                   label="Cuenta"   value={provider.account_number||'N/A'} />
+          <InfoRow                   label="CLABE"    value={provider.clabe||'N/A'} />
+        </div>
+      </Card>
+
+      {/* Crédito — siempre solo lectura */}
+      <Card title="Información Crediticia" variant="elevated">
+        <div className="space-y-4">
+          <InfoRow
+            label="Monto de Crédito"
+            value={provider.credit_amount
+              ? `$${parseFloat(provider.credit_amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+              : 'No asignado'}
+          />
+          <InfoRow
+            label="Días de Crédito"
+            value={provider.credit_days ? `${provider.credit_days} días` : 'No asignado'}
+          />
+        </div>
+      </Card>
+
+      {/* Productos y servicios del catálogo */}
+      <Card title="Productos y Servicios" variant="elevated">
+        <div className="space-y-4">
+          <div>
+            <p className="mb-2 text-sm font-semibold text-gray-700">Productos</p>
+            {!hasProducts ? (
+              <p className="text-sm italic text-gray-400">Sin productos registrados</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {products.map(item => (
+                  <span key={item.id}
+                    className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-primary-50 text-primary-700 border border-primary-200">
+                    {item.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-semibold text-gray-700">Servicios</p>
+            {!hasServices ? (
+              <p className="text-sm italic text-gray-400">Sin servicios registrados</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {services.map(item => (
+                  <span key={item.id}
+                    className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-teal-50 text-teal-700 border border-teal-200">
+                    {item.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      {provider.observations && (
+        <Card title="Observaciones" variant="elevated" className="lg:col-span-2">
+          <p className="text-sm text-gray-600">{provider.observations}</p>
+        </Card>
+      )}
+    </div>
+  );
+};
 
 const ContactsInfo = ({ contacts }) => (
   <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">

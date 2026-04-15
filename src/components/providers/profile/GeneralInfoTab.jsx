@@ -5,26 +5,25 @@ import { Button } from '../../common/Button';
 import { Input } from '../../common/Input';
 import {
   Building2, Mail, Phone, MapPin, Save, X, Edit2,
-  AlertCircle, CreditCard, Package, User,
+  AlertCircle, CreditCard, User, Info,
 } from 'lucide-react';
 import { showToast } from '../../../utils/toast';
 
 const ESTADOS_MEXICO = [
-  'Aguascalientes', 'Baja California', 'Baja California Sur', 'Campeche',
-  'Chiapas', 'Chihuahua', 'Coahuila', 'Colima', 'Durango', 'Guanajuato',
-  'Guerrero', 'Hidalgo', 'Jalisco', 'México', 'Michoacán', 'Morelos',
-  'Nayarit', 'Nuevo León', 'Oaxaca', 'Puebla', 'Querétaro', 'Quintana Roo',
-  'San Luis Potosí', 'Sinaloa', 'Sonora', 'Tabasco', 'Tamaulipas',
-  'Tlaxcala', 'Veracruz', 'Yucatán', 'Zacatecas',
+  'Aguascalientes','Baja California','Baja California Sur','Campeche',
+  'Chiapas','Chihuahua','Coahuila','Colima','Durango','Guanajuato',
+  'Guerrero','Hidalgo','Jalisco','México','Michoacán','Morelos',
+  'Nayarit','Nuevo León','Oaxaca','Puebla','Querétaro','Quintana Roo',
+  'San Luis Potosí','Sinaloa','Sonora','Tabasco','Tamaulipas',
+  'Tlaxcala','Veracruz','Yucatán','Zacatecas',
 ];
 
 const CIUDADES_POR_ESTADO = {
-  'Jalisco':    ['Guadalajara', 'Zapopan', 'Tlaquepaque', 'Tonalá', 'Tlajomulco de Zúñiga', 'El Salto', 'Puerto Vallarta', 'Lagos de Moreno', 'Tepatitlán', 'Zapotlanejo', 'Otra'],
-  'México':     ['Toluca', 'Ecatepec', 'Naucalpan', 'Tlalnepantla', 'Nezahualcóyotl', 'Otra'],
-  'Nuevo León': ['Monterrey', 'Guadalupe', 'San Nicolás de los Garza', 'Apodaca', 'Otra'],
+  'Jalisco':    ['Guadalajara','Zapopan','Tlaquepaque','Tonalá','Tlajomulco de Zúñiga','El Salto','Puerto Vallarta','Lagos de Moreno','Tepatitlán','Zapotlanejo','Otra'],
+  'México':     ['Toluca','Ecatepec','Naucalpan','Tlalnepantla','Nezahualcóyotl','Otra'],
+  'Nuevo León': ['Monterrey','Guadalupe','San Nicolás de los Garza','Apodaca','Otra'],
 };
 
-// ─── Sección reutilizable ─────────────────────────────────────────────────────
 const Section = ({ icon: Icon, title, children }) => (
   <div className="p-5 bg-white border-2 border-gray-200 rounded-xl">
     <h3 className="flex items-center gap-2 mb-4 text-base font-bold text-gray-900">
@@ -40,35 +39,26 @@ export const GeneralInfoTab = ({ provider }) => {
   const [isEditing, setIsEditing] = useState(false);
 
   const buildForm = (p) => ({
-    // Empresa
-    business_name:      p?.business_name       || '',
-    rfc:                p?.rfc                 || '',
+    business_name:        p?.business_name        || '',
+    rfc:                  p?.rfc                  || '',
     legal_representative: p?.legal_representative || '',
-    // Contacto
-    phone:              p?.phone               || '',
-    // Dirección
-    street:             p?.street              || '',
-    exterior_number:    p?.exterior_number     || '',
-    interior_number:    p?.interior_number     || '',
-    neighborhood:       p?.neighborhood        || '',
-    city:               p?.city               || '',
-    state:              p?.state              || 'Jalisco',
-    postal_code:        p?.postal_code        || '',
-    country:            p?.country            || 'México',
-    // Bancaria
-    bank:               p?.bank               || '',
-    bank_branch:        p?.bank_branch        || '',
-    account_number:     p?.account_number     || '',
-    clabe:              p?.clabe              || '',
-    // Crédito
-    credit_amount:      p?.credit_amount      || '',
-    credit_days:        p?.credit_days        || '',
-    // Productos y servicios
-    products:           p?.products           || '',
-    services:           p?.services           || '',
+    phone:                p?.phone                || '',
+    street:               p?.street               || '',
+    exterior_number:      p?.exterior_number      || '',
+    interior_number:      p?.interior_number      || '',
+    neighborhood:         p?.neighborhood         || '',
+    city:                 p?.city                 || '',
+    state:                p?.state                || 'Jalisco',
+    postal_code:          p?.postal_code          || '',
+    country:              p?.country              || 'México',
+    bank:                 p?.bank                 || '',
+    bank_branch:          p?.bank_branch          || '',
+    account_number:       p?.account_number       || '',
+    clabe:                p?.clabe                || '',
+    // Crédito — NO se incluye en el form, solo se muestra en modo lectura
   });
 
-  const [formData, setFormData]     = useState(buildForm(provider));
+  const [formData, setFormData] = useState(buildForm(provider));
   const [customCity, setCustomCity] = useState('');
 
   const updateMutation = useMutation({
@@ -85,28 +75,10 @@ export const GeneralInfoTab = ({ provider }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'postal_code') {
-      setFormData({ ...formData, [name]: value.replace(/[^0-9]/g, '').slice(0, 5) });
-      return;
-    }
-    if (name === 'clabe') {
-      setFormData({ ...formData, [name]: value.replace(/[^0-9]/g, '').slice(0, 18) });
-      return;
-    }
-    if (name === 'credit_days') {
-      setFormData({ ...formData, [name]: value.replace(/[^0-9]/g, '') });
-      return;
-    }
-    if (name === 'state') {
-      setFormData({ ...formData, state: value, city: '' });
-      setCustomCity('');
-      return;
-    }
-    if (name === 'city' && value === 'Otra') {
-      setFormData({ ...formData, city: '' });
-      setCustomCity('');
-      return;
-    }
+    if (name === 'postal_code') { setFormData({ ...formData, [name]: value.replace(/[^0-9]/g, '').slice(0, 5) }); return; }
+    if (name === 'clabe')       { setFormData({ ...formData, [name]: value.replace(/[^0-9]/g, '').slice(0, 18) }); return; }
+    if (name === 'state')       { setFormData({ ...formData, state: value, city: '' }); setCustomCity(''); return; }
+    if (name === 'city' && value === 'Otra') { setFormData({ ...formData, city: '' }); setCustomCity(''); return; }
     setFormData({ ...formData, [name]: value });
   };
 
@@ -126,7 +98,7 @@ export const GeneralInfoTab = ({ provider }) => {
     setIsEditing(false);
   };
 
-  const getCiudades          = () => CIUDADES_POR_ESTADO[formData.state] || ['Otra'];
+  const getCiudades           = () => CIUDADES_POR_ESTADO[formData.state] || ['Otra'];
   const ciudadEsPersonalizada = () => {
     const ciudades = getCiudades();
     return formData.city && !ciudades.includes(formData.city);
@@ -154,7 +126,7 @@ export const GeneralInfoTab = ({ provider }) => {
 
       <form onSubmit={handleSubmit} className="space-y-6">
 
-        {/* ── Datos de la Empresa ── */}
+        {/* Datos de la Empresa */}
         <Section icon={Building2} title="Datos de la Empresa">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Input label="Razón Social" name="business_name" value={formData.business_name} onChange={handleChange} disabled={!isEditing} required placeholder="Nombre de la empresa" />
@@ -163,7 +135,7 @@ export const GeneralInfoTab = ({ provider }) => {
           </div>
         </Section>
 
-        {/* ── Contacto ── */}
+        {/* Contacto */}
         <Section icon={Phone} title="Información de Contacto">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Input label="Correo Electrónico" type="email" value={provider?.email || ''} disabled leftIcon={<Mail className="w-5 h-5 text-gray-400" />} helperText="El correo no se puede modificar" />
@@ -171,7 +143,7 @@ export const GeneralInfoTab = ({ provider }) => {
           </div>
         </Section>
 
-        {/* ── Dirección ── */}
+        {/* Dirección */}
         <Section icon={MapPin} title="Dirección">
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -220,7 +192,7 @@ export const GeneralInfoTab = ({ provider }) => {
           </div>
         </Section>
 
-        {/* ── Información Bancaria ── */}
+        {/* Información Bancaria */}
         <Section icon={CreditCard} title="Información Bancaria">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Input label="Banco" name="bank" value={formData.bank} onChange={handleChange} disabled={!isEditing} placeholder="BBVA, Banamex, Santander..." leftIcon={<CreditCard className="w-4 h-4 text-gray-400" />} />
@@ -230,46 +202,43 @@ export const GeneralInfoTab = ({ provider }) => {
           </div>
         </Section>
 
-        {/* ── Crédito ── */}
+        {/* ✅ Crédito — SOLO LECTURA para el proveedor, lo gestiona Compras */}
         <Section icon={CreditCard} title="Información Crediticia">
+          <div className="flex items-start gap-3 p-3 mb-4 border rounded-xl bg-amber-50 border-amber-200">
+            <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700">
+              La información crediticia es gestionada por el área de Compras de DASAVENA.
+            </p>
+          </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="block mb-2 text-sm font-semibold text-gray-700">Monto de Crédito</label>
               <div className="relative">
                 <span className="absolute text-sm font-medium text-gray-400 -translate-y-1/2 left-3 top-1/2">$</span>
                 <input
-                  type="number" name="credit_amount" value={formData.credit_amount}
-                  onChange={handleChange} disabled={!isEditing}
-                  placeholder="0.00" min="0" step="0.01"
-                  className="w-full py-3 pr-4 transition-all border-2 border-gray-300 pl-7 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:bg-gray-50 disabled:text-gray-500"
+                  type="text"
+                  value={provider?.credit_amount
+                    ? Number(provider.credit_amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })
+                    : '0.00'}
+                  disabled
+                  className="w-full py-3 pr-4 text-gray-500 border-2 border-gray-200 pl-7 rounded-xl bg-gray-50"
                 />
               </div>
             </div>
-            <Input label="Días de Crédito" name="credit_days" value={formData.credit_days} onChange={handleChange} disabled={!isEditing} placeholder="Ej: 30" helperText={isEditing ? 'Número de días' : ''} />
-          </div>
-        </Section>
-
-        {/* ── Productos y Servicios ── */}
-        <Section icon={Package} title="Productos y Servicios">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label className="block mb-2 text-sm font-semibold text-gray-700">Productos</label>
-              <textarea name="products" value={formData.products} onChange={handleChange} disabled={!isEditing}
-                placeholder="Describe los productos que ofreces..." rows={3}
-                className="w-full px-4 py-3 text-sm transition-all border-2 border-gray-300 resize-none rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:bg-gray-50 disabled:text-gray-500"
-              />
-            </div>
-            <div>
-              <label className="block mb-2 text-sm font-semibold text-gray-700">Servicios</label>
-              <textarea name="services" value={formData.services} onChange={handleChange} disabled={!isEditing}
-                placeholder="Describe los servicios que ofreces..." rows={3}
-                className="w-full px-4 py-3 text-sm transition-all border-2 border-gray-300 resize-none rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:bg-gray-50 disabled:text-gray-500"
-              />
+              <label className="block mb-2 text-sm font-semibold text-gray-700">Días de Crédito</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={provider?.credit_days ? `${provider.credit_days} días` : 'No asignado'}
+                  disabled
+                  className="w-full px-4 py-3 text-gray-500 border-2 border-gray-200 rounded-xl bg-gray-50"
+                />
+              </div>
             </div>
           </div>
         </Section>
 
-        {/* Tip cuando no está editando */}
         {!isEditing && (
           <div className="p-4 border border-blue-200 rounded-xl bg-blue-50">
             <div className="flex items-start gap-3">
@@ -282,7 +251,6 @@ export const GeneralInfoTab = ({ provider }) => {
           </div>
         )}
 
-        {/* Botones de acción */}
         {isEditing && (
           <div className="flex justify-end gap-3 pt-6 border-t-2 border-gray-200">
             <Button type="button" variant="ghost" leftIcon={<X className="w-4 h-4" />} onClick={handleCancel}>Cancelar</Button>

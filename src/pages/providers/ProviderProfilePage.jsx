@@ -2,21 +2,20 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { providerProfileService } from '../../api/providerProfileService';
-import { GeneralInfoTab } from '../../components/providers/profile/GeneralInfoTab';
-import { ContactsTab } from '../../components/providers/profile/ContactsTab';
-import { VehiclesTab } from '../../components/providers/profile/VehiclesTab';
-import { PersonnelTab } from '../../components/providers/profile/PersonnelTab';
-import { User, Users, Truck, UserCheck } from 'lucide-react';
+import { GeneralInfoTab }       from '../../components/providers/profile/GeneralInfoTab';
+import { ContactsTab }          from '../../components/providers/profile/ContactsTab';
+import { VehiclesTab }          from '../../components/providers/profile/VehiclesTab';
+import { PersonnelTab }         from '../../components/providers/profile/PersonnelTab';
+import { ProductsServicesTab }  from '../../components/providers/profile/ProductsServicesTab';
+import { User, Users, Truck, UserCheck, Package } from 'lucide-react';
 
-const VALID_TABS = ['general', 'contacts', 'vehicles', 'personnel'];
+const VALID_TABS = ['general', 'contacts', 'vehicles', 'personnel', 'products'];
 
 export const ProviderProfilePage = () => {
-  // ✅ Leer ?tab= de la URL — si viene del dashboard ya abre el tab correcto
   const [searchParams] = useSearchParams();
   const initialTab = VALID_TABS.includes(searchParams.get('tab'))
     ? searchParams.get('tab')
     : 'general';
-
   const [activeTab, setActiveTab] = useState(initialTab);
 
   const { data: profileData, isLoading } = useQuery({
@@ -29,6 +28,7 @@ export const ProviderProfilePage = () => {
     { id: 'contacts',  name: 'Contactos',            icon: Users     },
     { id: 'vehicles',  name: 'Vehículos',            icon: Truck     },
     { id: 'personnel', name: 'Personal',             icon: UserCheck },
+    { id: 'products',  name: 'Productos y Servicios',icon: Package   },
   ];
 
   if (isLoading) {
@@ -61,7 +61,7 @@ export const ProviderProfilePage = () => {
 
       {/* Tabs */}
       <div className="overflow-hidden bg-white border-2 border-gray-200 shadow-sm rounded-xl">
-        <nav className="flex border-b-2 border-gray-200">
+        <nav className="flex overflow-x-auto border-b-2 border-gray-200">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -69,13 +69,13 @@ export const ProviderProfilePage = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 py-4 px-6 border-b-2 font-semibold text-sm transition-all duration-200
+                className={`flex items-center gap-2 py-4 px-5 border-b-2 font-semibold text-sm transition-all duration-200 whitespace-nowrap
                   ${isActive
                     ? 'border-primary-500 text-primary-600 bg-primary-50'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                   }`}
               >
-                <Icon className="w-5 h-5" />
+                <Icon className="w-4 h-4" />
                 {tab.name}
               </button>
             );
@@ -83,10 +83,11 @@ export const ProviderProfilePage = () => {
         </nav>
 
         <div className="p-6">
-          {activeTab === 'general'   && <GeneralInfoTab provider={profileData?.provider} />}
-          {activeTab === 'contacts'  && <ContactsTab providerId={profileData?.provider?.id} />}
-          {activeTab === 'vehicles'  && <VehiclesTab providerId={profileData?.provider?.id} />}
-          {activeTab === 'personnel' && <PersonnelTab providerId={profileData?.provider?.id} />}
+          {activeTab === 'general'   && <GeneralInfoTab      provider={profileData?.provider} />}
+          {activeTab === 'contacts'  && <ContactsTab         providerId={profileData?.provider?.id} />}
+          {activeTab === 'vehicles'  && <VehiclesTab         providerId={profileData?.provider?.id} />}
+          {activeTab === 'personnel' && <PersonnelTab        providerId={profileData?.provider?.id} />}
+          {activeTab === 'products'  && <ProductsServicesTab />}
         </div>
       </div>
     </div>
