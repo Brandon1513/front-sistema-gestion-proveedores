@@ -92,12 +92,13 @@ export const ProviderDetailPage = () => {
   const [selectedCertification, setSelectedCertification]   = useState(null);
 
   const { user } = useAuthStore();
-  const userRole       = user?.roles?.[0]?.name || user?.roles?.[0] || user?.role || '';
-  const isAdminOrSuper = ['super_admin', 'admin'].includes(userRole);
-  const isCalidad      = userRole === 'calidad';
-  const isCompras      = userRole === 'compras';
-  const canEdit        = isCompras || isAdminOrSuper;
-  const canChangeStatus = isCalidad || isAdminOrSuper;
+  const userRole        = user?.roles?.[0]?.name || user?.roles?.[0] || user?.role || '';
+  const isAdminOrSuper  = ['super_admin', 'admin'].includes(userRole);
+  const isCalidad       = userRole === 'calidad';
+  const isCompras       = userRole === 'compras';
+  const isIngeniero     = userRole === 'ingeniero_alimentos'; // 
+  const canEdit         = isCompras || isAdminOrSuper;        // ingeniero NO puede editar
+  const canChangeStatus = isCalidad || isAdminOrSuper;        // ingeniero NO puede cambiar estado
 
   const { data: provider, isLoading, error } = useQuery({
     queryKey: ['provider', id],

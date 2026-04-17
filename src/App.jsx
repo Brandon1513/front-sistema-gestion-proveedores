@@ -31,6 +31,7 @@ import { SecurityCalendarPage } from './pages/appointments/SecurityCalendarPage'
 import { FoodEngineerPage } from './pages/appointments/FoodEngineerPage';
 import { SmartRedirect } from './components/auth/SmartRedirect';
 import { CatalogPage } from './pages/settings/CatalogPage';
+import { DocumentManagementPage } from './pages/settings/DocumentManagementPage'; // ✅ NUEVO
 import './styles/custom-animations.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -39,7 +40,6 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
-// ✅ Redirige al home correcto según el rol
 const PublicRoute = ({ children }) => {
   const { isAuthenticated, user } = useAuthStore();
   if (isAuthenticated) {
@@ -63,7 +63,7 @@ function App() {
           <Route path="/reset-password"  element={<ResetPasswordPage />} />
           <Route path="/register/:token" element={<ProviderRegisterPage />} />
 
-          {/* ── DashboardLayout — todos los roles internos ── */}
+          {/* ── DashboardLayout ── */}
           <Route path="/" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
             <Route index element={<SmartRedirect />} />
 
@@ -92,8 +92,6 @@ function App() {
                 <AppointmentsPage />
               </RoleProtectedRoute>
             } />
-
-            {/* ✅ Rutas de nuevos roles — dentro del DashboardLayout */}
             <Route path="security/calendar" element={
               <RoleProtectedRoute allowedRoles={['super_admin','admin','seguridad']}>
                 <SecurityCalendarPage />
@@ -105,8 +103,16 @@ function App() {
               </RoleProtectedRoute>
             } />
 
-            <Route path="providers"          element={<ProvidersPage />} />
-            <Route path="providers/:id"      element={<ProviderDetailPage />} />
+            <Route path="providers" element={
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','compras','ingeniero_alimentos']}>
+                <ProvidersPage />
+              </RoleProtectedRoute>
+            } />
+            <Route path="providers/:id" element={
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','compras','ingeniero_alimentos']}>
+                <ProviderDetailPage />
+              </RoleProtectedRoute>
+            } />
             <Route path="providers/new"      element={<ProviderFormPage />} />
             <Route path="providers/:id/edit" element={<ProviderFormPage />} />
 
@@ -125,11 +131,20 @@ function App() {
                 <DocumentValidationPage />
               </RoleProtectedRoute>
             } />
+
+            {/* ── Configuración ── */}
             <Route path="settings/catalog" element={
               <RoleProtectedRoute allowedRoles={['super_admin','admin','compras']}>
                 <CatalogPage />
               </RoleProtectedRoute>
             } />
+            {/* ✅ NUEVO — Gestión de tipos de documentos */}
+            <Route path="settings/documents" element={
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad']}>
+                <DocumentManagementPage />
+              </RoleProtectedRoute>
+            } />
+
             <Route path="profile" element={<MyProfilePage />} />
           </Route>
 
