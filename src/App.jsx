@@ -31,7 +31,8 @@ import { SecurityCalendarPage } from './pages/appointments/SecurityCalendarPage'
 import { FoodEngineerPage } from './pages/appointments/FoodEngineerPage';
 import { SmartRedirect } from './components/auth/SmartRedirect';
 import { CatalogPage } from './pages/settings/CatalogPage';
-import { DocumentManagementPage } from './pages/settings/DocumentManagementPage'; // ✅ NUEVO
+import { DocumentManagementPage } from './pages/settings/DocumentManagementPage'; 
+import { ProviderHelpPage } from './pages/providers/ProviderHelpPage';
 import './styles/custom-animations.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -162,6 +163,7 @@ function App() {
             <Route path="/provider/certifications" element={<ProviderCertificationsPage />} />
             <Route path="/provider/profile"        element={<ProviderProfilePage />} />
             <Route path="/provider/appointments"   element={<ProviderAppointmentsPage />} />
+            <Route path="/provider/help"           element={<ProviderHelpPage/>}/>
           </Route>
 
           <Route path="*" element={<Navigate to="/login" replace />} />
