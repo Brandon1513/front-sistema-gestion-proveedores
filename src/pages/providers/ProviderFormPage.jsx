@@ -16,15 +16,31 @@ import {
   Package, Wrench, Search, CheckCircle, ChevronDown, ChevronUp,
 } from 'lucide-react';
 
-// ─── Selector de catálogo (inline en el form) ─────────────────────────────────
+// ─── Constantes de dirección ──────────────────────────────────────────────────
+const ESTADOS_MEXICO = [
+  'Aguascalientes','Baja California','Baja California Sur','Campeche',
+  'Chiapas','Chihuahua','Coahuila','Colima','Durango','Guanajuato',
+  'Guerrero','Hidalgo','Jalisco','CDMX','Michoacán','Morelos',
+  'Nayarit','Nuevo León','Oaxaca','Puebla','Querétaro','Quintana Roo',
+  'San Luis Potosí','Sinaloa','Sonora','Tabasco','Tamaulipas',
+  'Tlaxcala','Veracruz','Yucatán','Zacatecas',
+];
+
+const CIUDADES_POR_ESTADO = {
+  'Jalisco':    ['Guadalajara','Zapopan','Tlaquepaque','Tonalá','Tlajomulco de Zúñiga','El Salto','Puerto Vallarta','Lagos de Moreno','Tepatitlán','Zapotlanejo','Otra'],
+  'CDMX':     ['Toluca','Ecatepec','Naucalpan','Tlalnepantla','Nezahualcóyotl','Otra'],
+  'Nuevo León': ['Monterrey','Guadalupe','San Nicolás de los Garza','Apodaca','Otra'],
+};
+
+const getCiudades = (state) => CIUDADES_POR_ESTADO[state] || ['Otra'];
+
+// ─── Selector de catálogo ─────────────────────────────────────────────────────
 const CatalogSelector = ({ type, categories, selectedIds, onToggle, search, setSearch }) => {
   const filtered = categories.filter(cat =>
     cat.items?.some(item => item.name.toLowerCase().includes(search.toLowerCase()))
   );
-
   return (
     <div className="space-y-3">
-      {/* Buscador */}
       <div className="relative">
         <Search className="absolute w-4 h-4 text-gray-400 -translate-y-1/2 left-3 top-1/2" />
         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
@@ -34,8 +50,6 @@ const CatalogSelector = ({ type, categories, selectedIds, onToggle, search, setS
           <button onClick={() => setSearch('')} className="absolute text-xs text-gray-400 -translate-y-1/2 right-3 top-1/2 hover:text-gray-600">✕</button>
         )}
       </div>
-
-      {/* Categorías */}
       {filtered.length === 0 ? (
         <p className="py-4 text-sm italic text-center text-gray-400">
           {search ? `Sin resultados para "${search}"` : 'Sin ítems disponibles'}
@@ -127,10 +141,12 @@ export const ProviderFormPage = () => {
     observations:         '',
   });
 
+  // ✅ Ciudad personalizada (cuando el estado no tiene la ciudad en la lista)
+  const [customCity, setCustomCity] = useState('');
+
   const [contacts,       setContacts]       = useState([]);
   const [errors,         setErrors]         = useState({});
 
-  // Catálogo
   const [selectedProductIds, setSelectedProductIds] = useState([]);
   const [selectedServiceIds, setSelectedServiceIds] = useState([]);
   const [catalogTab,    setCatalogTab]    = useState('products');
@@ -138,34 +154,29 @@ export const ProviderFormPage = () => {
   const [searchService, setSearchService] = useState('');
   const [catalogReady,  setCatalogReady]  = useState(false);
 
-  // Tipos de proveedores
   const { data: typesData } = useQuery({
     queryKey: ['provider-types'],
     queryFn: providerTypeService.getAll,
   });
 
-  // Catálogo global
   const { data: catalogData } = useQuery({
     queryKey: ['catalog-for-form'],
     queryFn: async () => { const r = await api.get('/catalog'); return r.data; },
     staleTime: 5 * 60 * 1000,
   });
 
-  // Selección actual del proveedor (solo en edición)
   const { data: providerProductsData } = useQuery({
     queryKey: ['provider-products-services-form', id],
     queryFn: async () => { const r = await api.get(`/providers/${id}/products-services`); return r.data; },
     enabled: isEditing,
   });
 
-  // Datos del proveedor
   const { data: providerData, isLoading } = useQuery({
     queryKey: ['provider', id],
     queryFn: () => providerService.getById(id),
     enabled: isEditing,
   });
 
-  // Inicializar formulario con datos del proveedor
   useEffect(() => {
     if (providerData?.provider) {
       const p = providerData.provider;
@@ -196,43 +207,64 @@ export const ProviderFormPage = () => {
     }
   }, [providerData]);
 
-  // Inicializar selección de catálogo
   useEffect(() => {
     if (providerProductsData && !catalogReady) {
-      const products = providerProductsData.products || [];
-      const services = providerProductsData.services || [];
-      setSelectedProductIds(products.map(i => i.id));
-      setSelectedServiceIds(services.map(i => i.id));
+      setSelectedProductIds((providerProductsData.products || []).map(i => i.id));
+      setSelectedServiceIds((providerProductsData.services || []).map(i => i.id));
       setCatalogReady(true);
     }
   }, [providerProductsData, catalogReady]);
 
   const productCategories = catalogData?.products || [];
   const serviceCategories = catalogData?.services || [];
+  const totalSelected     = selectedProductIds.length + selectedServiceIds.length;
 
   const toggleProduct = (itemId) =>
     setSelectedProductIds(prev => prev.includes(itemId) ? prev.filter(i => i !== itemId) : [...prev, itemId]);
   const toggleService = (itemId) =>
     setSelectedServiceIds(prev => prev.includes(itemId) ? prev.filter(i => i !== itemId) : [...prev, itemId]);
 
-  const totalSelected = selectedProductIds.length + selectedServiceIds.length;
+  // ✅ Detectar si la ciudad guardada no está en la lista del estado
+  const ciudadEsPersonalizada = useMemo(() => {
+    const ciudades = getCiudades(formData.state);
+    return formData.city && !ciudades.includes(formData.city);
+  }, [formData.state, formData.city]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    // ✅ Al cambiar estado, limpiar ciudad
+    if (name === 'state') {
+      setFormData(prev => ({ ...prev, state: value, city: '' }));
+      setCustomCity('');
+      return;
+    }
+    // ✅ Al seleccionar "Otra" en ciudad, limpiar para mostrar input
+    if (name === 'city' && value === 'Otra') {
+      setFormData(prev => ({ ...prev, city: '' }));
+      setCustomCity('');
+      return;
+    }
+    setFormData(prev => ({ ...prev, [name]: value }));
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
+  };
+
+  const handleCustomCityChange = (e) => {
+    setCustomCity(e.target.value);
+    setFormData(prev => ({ ...prev, city: e.target.value }));
+  };
 
   const mutation = useMutation({
     mutationFn: async (data) => {
-      // 1. Guardar datos del proveedor
       const providerRes = isEditing
         ? await providerService.update(id, data)
         : await providerService.create(data);
-
-      // 2. Si es edición, sincronizar productos/servicios
       const providerId = isEditing ? id : (providerRes?.provider?.id || providerRes?.id);
       if (providerId) {
         await api.put(`/providers/${providerId}/products-services-sync`, {
           product_ids: selectedProductIds,
           service_ids: selectedServiceIds,
-        }).catch(() => {}); // No bloquear si falla
+        }).catch(() => {});
       }
-
       return providerRes;
     },
     onSuccess: () => {
@@ -249,12 +281,6 @@ export const ProviderFormPage = () => {
     },
   });
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
-  };
-
   const handleSubmit = (e) => {
     e.preventDefault();
     mutation.mutate({ ...formData, contacts });
@@ -265,6 +291,9 @@ export const ProviderFormPage = () => {
       <div className="w-12 h-12 border-4 rounded-full border-t-primary border-r-primary border-b-transparent border-l-transparent animate-spin" />
     </div>
   );
+
+  const selectClass = "w-full px-4 py-3 transition-all border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm";
+  const disabledClass = "w-full px-4 py-3 text-gray-500 border-2 border-gray-200 rounded-xl bg-gray-50 text-sm";
 
   return (
     <div className="space-y-6">
@@ -285,52 +314,92 @@ export const ProviderFormPage = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+
         {/* Información General */}
         <Card title={<div className="flex items-center gap-2"><Building2 className="w-5 h-5 text-primary-600" /><span>Información General</span></div>} variant="elevated">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Select label="Tipo de Proveedor *" name="provider_type_id" value={formData.provider_type_id} onChange={handleChange}
               options={[{ value:'', label:'Selecciona un tipo...' }, ...(typesData?.provider_types?.map(t => ({ value:t.id, label:t.name })) || [])]}
               error={errors.provider_type_id?.[0]} required />
-            <Input label="Razón Social *"       name="business_name"        value={formData.business_name}        onChange={handleChange} error={errors.business_name?.[0]}        required />
-            <Input label="RFC *"                name="rfc"                  value={formData.rfc}                  onChange={handleChange} error={errors.rfc?.[0]}                  maxLength={13} required helperText="12 o 13 caracteres" />
-            <Input label="Representante Legal"  name="legal_representative" value={formData.legal_representative} onChange={handleChange} error={errors.legal_representative?.[0]} />
+            <Input label="Razón Social *"      name="business_name"        value={formData.business_name}        onChange={handleChange} error={errors.business_name?.[0]}        required />
+            <Input label="RFC *"               name="rfc"                  value={formData.rfc}                  onChange={handleChange} error={errors.rfc?.[0]}                  maxLength={13} required helperText="12 o 13 caracteres" />
+            <Input label="Representante Legal" name="legal_representative" value={formData.legal_representative} onChange={handleChange} error={errors.legal_representative?.[0]} />
           </div>
         </Card>
 
-        {/* Dirección */}
+        {/* ✅ Dirección con selects de estado y ciudad */}
         <Card title={<div className="flex items-center gap-2"><MapPin className="w-5 h-5 text-primary-600" /><span>Dirección</span></div>} variant="elevated">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Input label="Calle"          name="street"           value={formData.street}           onChange={handleChange} error={errors.street?.[0]} />
+            <Input label="Calle"         name="street"          value={formData.street}          onChange={handleChange} error={errors.street?.[0]} />
             <div className="grid grid-cols-2 gap-2">
-              <Input label="No. Exterior" name="exterior_number"  value={formData.exterior_number}  onChange={handleChange} error={errors.exterior_number?.[0]} />
-              <Input label="No. Interior" name="interior_number"  value={formData.interior_number}  onChange={handleChange} error={errors.interior_number?.[0]} />
+              <Input label="No. Exterior" name="exterior_number" value={formData.exterior_number} onChange={handleChange} error={errors.exterior_number?.[0]} />
+              <Input label="No. Interior" name="interior_number" value={formData.interior_number} onChange={handleChange} error={errors.interior_number?.[0]} />
             </div>
-            <Input label="Colonia"        name="neighborhood"     value={formData.neighborhood}     onChange={handleChange} error={errors.neighborhood?.[0]} />
-            <Input label="Ciudad"         name="city"             value={formData.city}             onChange={handleChange} error={errors.city?.[0]} />
-            <Input label="Estado"         name="state"            value={formData.state}            onChange={handleChange} error={errors.state?.[0]} />
-            <Input label="Código Postal"  name="postal_code"      value={formData.postal_code}      onChange={handleChange} error={errors.postal_code?.[0]} maxLength={10} helperText="5 dígitos" />
+            <Input label="Colonia"       name="neighborhood"    value={formData.neighborhood}    onChange={handleChange} error={errors.neighborhood?.[0]} />
+            <Input label="Código Postal" name="postal_code"     value={formData.postal_code}     onChange={handleChange} error={errors.postal_code?.[0]} maxLength={10} helperText="5 dígitos" />
+
+            {/* ✅ Select de Estado */}
+            <div>
+              <label className="block mb-2 text-sm font-semibold text-gray-700">
+                Estado
+              </label>
+              <select name="state" value={formData.state} onChange={handleChange} className={selectClass}>
+                <option value="">Selecciona un estado</option>
+                {ESTADOS_MEXICO.map(e => <option key={e} value={e}>{e}</option>)}
+              </select>
+              {errors.state?.[0] && <p className="mt-1 text-xs text-red-600">{errors.state[0]}</p>}
+            </div>
+
+            {/* ✅ Select de Ciudad */}
+            <div>
+              <label className="block mb-2 text-sm font-semibold text-gray-700">
+                Ciudad
+              </label>
+              <div className="space-y-2">
+                <select
+                  name="city"
+                  value={ciudadEsPersonalizada ? 'Otra' : formData.city}
+                  onChange={handleChange}
+                  className={selectClass}
+                  disabled={!formData.state}>
+                  <option value="">{formData.state ? 'Selecciona una ciudad' : 'Primero selecciona un estado'}</option>
+                  {getCiudades(formData.state).map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                {/* Input para ciudad personalizada */}
+                {((formData.city === '' && formData.state && getCiudades(formData.state).includes('Otra')) || ciudadEsPersonalizada) && (
+                  <input
+                    type="text"
+                    value={ciudadEsPersonalizada ? formData.city : customCity}
+                    onChange={handleCustomCityChange}
+                    placeholder="Escribe la ciudad"
+                    className={selectClass}
+                  />
+                )}
+              </div>
+              {errors.city?.[0] && <p className="mt-1 text-xs text-red-600">{errors.city[0]}</p>}
+            </div>
           </div>
         </Card>
 
         {/* Contacto */}
         <Card title={<div className="flex items-center gap-2"><Phone className="w-5 h-5 text-primary-600" /><span>Información de Contacto</span></div>} variant="elevated">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Input label="Teléfono"             name="phone" value={formData.phone} onChange={handleChange} error={errors.phone?.[0]} placeholder="33 1234 5678" />
-            <Input label="Correo Electrónico"   type="email" name="email" value={formData.email} onChange={handleChange} error={errors.email?.[0]} placeholder="correo@empresa.com" />
+            <Input label="Teléfono"           name="phone" value={formData.phone} onChange={handleChange} error={errors.phone?.[0]} placeholder="33 1234 5678" />
+            <Input label="Correo Electrónico" type="email" name="email" value={formData.email} onChange={handleChange} error={errors.email?.[0]} placeholder="correo@empresa.com" />
           </div>
         </Card>
 
         {/* Bancaria */}
         <Card title={<div className="flex items-center gap-2"><CreditCard className="w-5 h-5 text-primary-600" /><span>Información Bancaria</span></div>} variant="elevated">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Input label="Banco"             name="bank"           value={formData.bank}           onChange={handleChange} error={errors.bank?.[0]} />
-            <Input label="Sucursal"          name="bank_branch"    value={formData.bank_branch}    onChange={handleChange} error={errors.bank_branch?.[0]} />
-            <Input label="Número de Cuenta"  name="account_number" value={formData.account_number} onChange={handleChange} error={errors.account_number?.[0]} />
-            <Input label="CLABE"             name="clabe"          value={formData.clabe}          onChange={handleChange} error={errors.clabe?.[0]} maxLength={18} helperText="18 dígitos" />
+            <Input label="Banco"            name="bank"           value={formData.bank}           onChange={handleChange} error={errors.bank?.[0]} />
+            <Input label="Sucursal"         name="bank_branch"    value={formData.bank_branch}    onChange={handleChange} error={errors.bank_branch?.[0]} />
+            <Input label="Número de Cuenta" name="account_number" value={formData.account_number} onChange={handleChange} error={errors.account_number?.[0]} />
+            <Input label="CLABE"            name="clabe"          value={formData.clabe}          onChange={handleChange} error={errors.clabe?.[0]} maxLength={18} helperText="18 dígitos" />
           </div>
         </Card>
 
-        {/* Crédito — editable solo para Compras/Admin en este form */}
+        {/* Crédito */}
         <Card title={<div className="flex items-center gap-2"><CreditCard className="w-5 h-5 text-primary-600" /><span>Información Crediticia</span></div>} variant="elevated">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Input label="Monto de Crédito" type="number" name="credit_amount" value={formData.credit_amount} onChange={handleChange} error={errors.credit_amount?.[0]} step="0.01" placeholder="0.00" />
@@ -338,10 +407,9 @@ export const ProviderFormPage = () => {
           </div>
         </Card>
 
-        {/* ✅ Productos y Servicios — catálogo con checkboxes */}
+        {/* Productos y Servicios */}
         <Card title={<div className="flex items-center gap-2"><Package className="w-5 h-5 text-primary-600" /><span>Productos y Servicios</span></div>} variant="elevated">
           <div className="space-y-4">
-            {/* Resumen seleccionados */}
             {totalSelected > 0 && (
               <div className="flex items-center gap-2 px-3 py-2 border rounded-lg bg-primary-50 border-primary-200">
                 <CheckCircle className="w-4 h-4 text-primary-600" />
@@ -350,8 +418,6 @@ export const ProviderFormPage = () => {
                 </p>
               </div>
             )}
-
-            {/* Tabs */}
             <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
               {[['products','Productos',Package],['services','Servicios',Wrench]].map(([val,label,Icon]) => (
                 <button key={val} type="button" onClick={() => setCatalogTab(val)}
@@ -368,26 +434,10 @@ export const ProviderFormPage = () => {
                 </button>
               ))}
             </div>
-
-            {/* Selector */}
             {catalogTab === 'products' ? (
-              <CatalogSelector
-                type="product"
-                categories={productCategories}
-                selectedIds={selectedProductIds}
-                onToggle={toggleProduct}
-                search={searchProduct}
-                setSearch={setSearchProduct}
-              />
+              <CatalogSelector type="product" categories={productCategories} selectedIds={selectedProductIds} onToggle={toggleProduct} search={searchProduct} setSearch={setSearchProduct} />
             ) : (
-              <CatalogSelector
-                type="service"
-                categories={serviceCategories}
-                selectedIds={selectedServiceIds}
-                onToggle={toggleService}
-                search={searchService}
-                setSearch={setSearchService}
-              />
+              <CatalogSelector type="service" categories={serviceCategories} selectedIds={selectedServiceIds} onToggle={toggleService} search={searchService} setSearch={setSearchService} />
             )}
           </div>
         </Card>

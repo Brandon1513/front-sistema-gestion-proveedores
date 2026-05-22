@@ -12,7 +12,7 @@ import { showToast } from '../../../utils/toast';
 const ESTADOS_MEXICO = [
   'Aguascalientes','Baja California','Baja California Sur','Campeche',
   'Chiapas','Chihuahua','Coahuila','Colima','Durango','Guanajuato',
-  'Guerrero','Hidalgo','Jalisco','México','Michoacán','Morelos',
+  'Guerrero','Hidalgo','Jalisco','CDMX','Michoacán','Morelos',
   'Nayarit','Nuevo León','Oaxaca','Puebla','Querétaro','Quintana Roo',
   'San Luis Potosí','Sinaloa','Sonora','Tabasco','Tamaulipas',
   'Tlaxcala','Veracruz','Yucatán','Zacatecas',
@@ -20,7 +20,7 @@ const ESTADOS_MEXICO = [
 
 const CIUDADES_POR_ESTADO = {
   'Jalisco':    ['Guadalajara','Zapopan','Tlaquepaque','Tonalá','Tlajomulco de Zúñiga','El Salto','Puerto Vallarta','Lagos de Moreno','Tepatitlán','Zapotlanejo','Otra'],
-  'México':     ['Toluca','Ecatepec','Naucalpan','Tlalnepantla','Nezahualcóyotl','Otra'],
+  'CDMX':     ['Toluca','Ecatepec','Naucalpan','Tlalnepantla','Nezahualcóyotl','Otra'],
   'Nuevo León': ['Monterrey','Guadalupe','San Nicolás de los Garza','Apodaca','Otra'],
 };
 
