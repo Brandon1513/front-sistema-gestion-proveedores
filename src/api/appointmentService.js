@@ -9,7 +9,7 @@ export const appointmentService = {
   create: async (data) => {
     const fd = new FormData();
     // Campos simples
-    const simple = ['provider_id','appointment_date','appointment_time','type','notes','status'];
+    const simple = ['provider_id','appointment_date','appointment_time','type','notes','status','products'];
     simple.forEach(k => { if (data[k] != null) fd.append(k, data[k]); });
     if (data.attachment) fd.append('attachment', data.attachment);
     // Items como JSON
