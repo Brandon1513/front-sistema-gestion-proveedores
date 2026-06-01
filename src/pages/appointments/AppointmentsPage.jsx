@@ -62,13 +62,13 @@ const ItemsSelector = ({ providerId, items, setItems, units }) => {
   const removeItem = (idx) => setItems(prev=>prev.filter((_,i)=>i!==idx));
   const updateItem = (idx,field,val) => setItems(prev=>prev.map((item,i)=>i===idx?{...item,[field]:val}:item));
 
-  if (!providerId) return <div className="p-4 text-center text-sm text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">Selecciona un proveedor para ver sus productos y servicios</div>;
-  if (isLoading)   return <div className="flex items-center gap-2 p-3 text-sm text-gray-500"><div className="w-4 h-4 border-2 border-t-primary-600 rounded-full animate-spin"/>Cargando...</div>;
-  if (allItems.length===0) return <div className="p-4 text-center text-sm text-amber-600 border-2 border-amber-200 rounded-xl bg-amber-50"><AlertCircle className="w-4 h-4 inline mr-1"/>Este proveedor no tiene productos o servicios asignados.</div>;
+  if (!providerId) return <div className="p-4 text-sm text-center text-gray-400 border-2 border-gray-200 border-dashed rounded-xl">Selecciona un proveedor para ver sus productos y servicios</div>;
+  if (isLoading)   return <div className="flex items-center gap-2 p-3 text-sm text-gray-500"><div className="w-4 h-4 border-2 rounded-full border-t-primary-600 animate-spin"/>Cargando...</div>;
+  if (allItems.length===0) return <div className="p-4 text-sm text-center border-2 text-amber-600 border-amber-200 rounded-xl bg-amber-50"><AlertCircle className="inline w-4 h-4 mr-1"/>Este proveedor no tiene productos o servicios asignados.</div>;
 
   return (
     <div className="space-y-3">
-      <div className="max-h-40 overflow-y-auto border-2 border-gray-200 rounded-xl divide-y divide-gray-100">
+      <div className="overflow-y-auto border-2 border-gray-200 divide-y divide-gray-100 max-h-40 rounded-xl">
         {allItems.map(p=>{const already=items.some(i=>i.product_service_id===p.id);return(
           <button key={p.id} type="button" onClick={()=>addItem(p)} disabled={already}
             className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors ${already?'bg-primary-50 text-primary-600':'bg-white hover:bg-gray-50 text-gray-700'}`}>
@@ -82,7 +82,7 @@ const ItemsSelector = ({ providerId, items, setItems, units }) => {
       </div>
       {items.length>0&&(
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Items en esta cita ({items.length})</p>
+          <p className="text-xs font-semibold tracking-wide text-gray-500 uppercase">Items en esta cita ({items.length})</p>
           {items.map((item,idx)=>(
             <div key={idx} className="flex items-center gap-2 p-3 border-2 border-primary-100 rounded-xl bg-primary-50/30">
               <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-gray-800 truncate">{item.product_name}</p></div>
@@ -124,7 +124,7 @@ const AppointmentModal = ({ appointment, onClose, preselectedDate }) => {
 
   const mutation=useMutation({
     mutationFn:isEdit?(data)=>appointmentService.update(appointment.id,data):appointmentService.create,
-    onSuccess:()=>{queryClient.invalidateQueries(['appointments']);showToast.success(isEdit?'Cita actualizada':'¡Cita agendada!');onClose();},
+    onSuccess:()=>{queryClient.invalidateQueries({ queryKey: ['appointments'], exact: false });showToast.success(isEdit?'Cita actualizada':'¡Cita agendada!');onClose();},
     onError:(err)=>{const errs=err.response?.data?.errors;setError(errs?Object.values(errs).flat().join(' · '):(err.response?.data?.message||'Error al guardar'));},
   });
 
@@ -140,28 +140,28 @@ const AppointmentModal = ({ appointment, onClose, preselectedDate }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-primary-50 to-pink-50 rounded-t-2xl sticky top-0 z-10">
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-primary-50 to-pink-50 rounded-t-2xl">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-primary shadow-md"><Calendar className="w-5 h-5 text-white"/></div>
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg shadow-md bg-gradient-primary"><Calendar className="w-5 h-5 text-white"/></div>
             <h2 className="text-xl font-bold text-gray-900">{isEdit?'Editar Cita':'Nueva Cita'}</h2>
           </div>
           <button onClick={onClose} className="p-2 text-gray-400 rounded-lg hover:bg-gray-100"><X className="w-5 h-5"/></button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {!isEdit&&<div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 border border-blue-200"><Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5"/><p className="text-xs text-blue-700">El proveedor completará vehículo y chofer desde su portal.</p></div>}
+          {!isEdit&&<div className="flex items-start gap-2 p-3 border border-blue-200 rounded-xl bg-blue-50"><Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5"/><p className="text-xs text-blue-700">El proveedor completará vehículo y chofer desde su portal.</p></div>}
           <div>
             <label className="block mb-1.5 text-sm font-semibold text-gray-700"><Building2 className="inline w-4 h-4 mr-1 text-primary-600"/>Proveedor *</label>
             <select value={form.provider_id} onChange={e=>set('provider_id',e.target.value)} required className="w-full px-3 py-2.5 text-sm border-2 border-gray-200 rounded-xl focus:outline-none focus:border-primary-500">
               <option value="">Selecciona un proveedor...</option>
               {providers.map(p=><option key={p.id} value={p.id}>{p.business_name} — {p.rfc}</option>)}
             </select>
-            {form.provider_id&&!isEdit&&checkingEligibility&&<div className="flex items-center gap-2 mt-2 text-xs text-gray-500"><div className="w-3 h-3 border-2 border-gray-300 border-t-primary-600 rounded-full animate-spin"/>Verificando...</div>}
-            {!isEdit&&eligibility?.eligible&&<div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200"><ShieldCheck className="w-4 h-4 text-green-600"/><p className="text-xs text-green-700 font-medium">Proveedor activo con documentación al día ✓</p></div>}
+            {form.provider_id&&!isEdit&&checkingEligibility&&<div className="flex items-center gap-2 mt-2 text-xs text-gray-500"><div className="w-3 h-3 border-2 border-gray-300 rounded-full border-t-primary-600 animate-spin"/>Verificando...</div>}
+            {!isEdit&&eligibility?.eligible&&<div className="flex items-center gap-2 px-3 py-2 mt-2 border border-green-200 rounded-lg bg-green-50"><ShieldCheck className="w-4 h-4 text-green-600"/><p className="text-xs font-medium text-green-700">Proveedor activo con documentación al día ✓</p></div>}
             {!isEdit&&isNotEligible&&(
-              <div className="mt-2 p-3 rounded-xl border-2 border-red-200 bg-red-50 space-y-2">
+              <div className="p-3 mt-2 space-y-2 border-2 border-red-200 rounded-xl bg-red-50">
                 <div className="flex items-center gap-2"><ShieldX className="w-4 h-4 text-red-600"/><p className="text-xs font-semibold text-red-700">Pendientes:</p></div>
-                <ul className="space-y-1 pl-6">{eligibility.issues.map((i,idx)=><li key={idx} className="text-xs text-red-600 list-disc">{i}</li>)}</ul>
-                <label className="flex items-start gap-2 mt-3 pt-2 border-t border-red-200 cursor-pointer">
+                <ul className="pl-6 space-y-1">{eligibility.issues.map((i,idx)=><li key={idx} className="text-xs text-red-600 list-disc">{i}</li>)}</ul>
+                <label className="flex items-start gap-2 pt-2 mt-3 border-t border-red-200 cursor-pointer">
                   <input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} className="mt-0.5 w-4 h-4 rounded"/>
                   <span className="text-xs text-red-700">Entiendo los pendientes y deseo agendar de todas formas</span>
                 </label>
@@ -193,7 +193,7 @@ const AppointmentModal = ({ appointment, onClose, preselectedDate }) => {
           </div>
           {form.type==='entrega'&&form.provider_id&&(
             <div>
-              <label className="block mb-1.5 text-sm font-semibold text-gray-700"><Package className="inline w-4 h-4 mr-1 text-primary-600"/>Productos / Servicios a entregar <span className="font-normal text-gray-400 ml-1">(selecciona de la lista)</span></label>
+              <label className="block mb-1.5 text-sm font-semibold text-gray-700"><Package className="inline w-4 h-4 mr-1 text-primary-600"/>Productos / Servicios a entregar <span className="ml-1 font-normal text-gray-400">(selecciona de la lista)</span></label>
               <ItemsSelector providerId={form.provider_id} items={itemsState} setItems={setItemsState} units={units}/>
             </div>
           )}
@@ -232,7 +232,7 @@ const DetailModal = ({ appointment, onClose, onEdit }) => {
   const [cancelReason,setCancelReason]=useState('');
   const cancelMutation=useMutation({
     mutationFn:()=>appointmentService.cancel(appointment.id,cancelReason),
-    onSuccess:()=>{queryClient.invalidateQueries(['appointments']);showToast.success('Cita cancelada');onClose();},
+    onSuccess:()=>{queryClient.invalidateQueries({ queryKey: ['appointments'], exact: false });showToast.success('Cita cancelada');onClose();},
     onError:()=>showToast.error('Error al cancelar'),
   });
   const cfg=STATUS_CONFIG[appointment.status]||STATUS_CONFIG.scheduled;
@@ -256,30 +256,30 @@ const DetailModal = ({ appointment, onClose, onEdit }) => {
         <div className="p-6 space-y-4">
           {/* Fecha y hora */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-xl bg-blue-50 border border-blue-100">
-              <p className="text-xs font-semibold text-blue-600 mb-1">Fecha</p>
+            <div className="p-3 border border-blue-100 rounded-xl bg-blue-50">
+              <p className="mb-1 text-xs font-semibold text-blue-600">Fecha</p>
               <p className="text-sm font-bold text-blue-900 capitalize">{new Date(appointment.appointment_date+'T12:00:00').toLocaleDateString('es-MX',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}</p>
             </div>
-            <div className="p-3 rounded-xl bg-purple-50 border border-purple-100">
-              <p className="text-xs font-semibold text-purple-600 mb-1">Hora</p>
+            <div className="p-3 border border-purple-100 rounded-xl bg-purple-50">
+              <p className="mb-1 text-xs font-semibold text-purple-600">Hora</p>
               <p className="text-sm font-bold text-purple-900">{appointment.appointment_time} hrs</p>
             </div>
           </div>
 
           {/* Proveedor */}
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-200">
-            <Building2 className="w-5 h-5 text-gray-500 flex-shrink-0"/>
+          <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl bg-gray-50">
+            <Building2 className="flex-shrink-0 w-5 h-5 text-gray-500"/>
             <div>
               <p className="text-xs text-gray-500">Proveedor</p>
               <p className="text-sm font-semibold text-gray-900">{appointment.provider?.business_name}</p>
-              <p className="text-xs text-gray-400 font-mono">{appointment.provider?.rfc}</p>
+              <p className="font-mono text-xs text-gray-400">{appointment.provider?.rfc}</p>
             </div>
           </div>
 
           {/* Items agendados — solo si NO hay recepción todavía */}
           {hasItems && !hasReception && (
-            <div className="p-3 rounded-xl bg-gray-50 border border-gray-200">
-              <p className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1"><Package className="w-3.5 h-3.5"/>Productos / Servicios agendados</p>
+            <div className="p-3 border border-gray-200 rounded-xl bg-gray-50">
+              <p className="flex items-center gap-1 mb-2 text-xs font-semibold text-gray-600"><Package className="w-3.5 h-3.5"/>Productos / Servicios agendados</p>
               <div className="space-y-1.5">
                 {appointment.items.map((item,i)=>(
                   <div key={i} className="flex items-center justify-between text-sm">
@@ -287,7 +287,7 @@ const DetailModal = ({ appointment, onClose, onEdit }) => {
                       {item.product_type==='product'?<Package className="w-3 h-3 text-primary-400"/>:<Wrench className="w-3 h-3 text-teal-400"/>}
                       {item.product_name}
                     </span>
-                    {item.quantity_expected&&<span className="text-gray-500 font-medium">{item.quantity_expected} {item.unit?.abbreviation}</span>}
+                    {item.quantity_expected&&<span className="font-medium text-gray-500">{item.quantity_expected} {item.unit?.abbreviation}</span>}
                   </div>
                 ))}
               </div>
@@ -327,8 +327,8 @@ const DetailModal = ({ appointment, onClose, onEdit }) => {
 
               {/* Detalle por producto */}
               {hasItems&&(
-                <div className="space-y-2 pt-2 border-t border-gray-200/60">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Detalle por producto</p>
+                <div className="pt-2 space-y-2 border-t border-gray-200/60">
+                  <p className="text-xs font-semibold tracking-wide text-gray-500 uppercase">Detalle por producto</p>
                   {appointment.items.map((item,i)=>{
                     const rec=parseFloat(item.quantity_received)||0;
                     const rej=parseFloat(item.quantity_rejected)||0;
@@ -352,7 +352,7 @@ const DetailModal = ({ appointment, onClose, onEdit }) => {
                           <div className="text-center p-1.5 rounded-lg bg-red-50 border border-red-100"><p className="text-xs text-red-500">Devuelto</p><p className="text-xs font-bold text-red-800">{rej.toFixed(2)} {abbr}</p></div>
                         </div>
                         {item.rejection_reason_label&&<p className="text-xs text-gray-500 mt-1.5">Motivo: <span className="font-medium">{item.rejection_reason_label}</span></p>}
-                        {item.reception_notes&&<p className="text-xs text-gray-600 mt-1 italic">"{item.reception_notes}"</p>}
+                        {item.reception_notes&&<p className="mt-1 text-xs italic text-gray-600">"{item.reception_notes}"</p>}
                       </div>
                     );
                   })}
@@ -362,7 +362,7 @@ const DetailModal = ({ appointment, onClose, onEdit }) => {
               {/* Observaciones del ingeniero */}
               {appointment.reception_notes&&(
                 <div className="pt-2 border-t border-gray-200/60">
-                  <p className="text-xs font-semibold text-gray-500 mb-1">Observaciones del ingeniero</p>
+                  <p className="mb-1 text-xs font-semibold text-gray-500">Observaciones del ingeniero</p>
                   <p className="text-sm text-gray-700">{appointment.reception_notes}</p>
                 </div>
               )}
@@ -371,7 +371,7 @@ const DetailModal = ({ appointment, onClose, onEdit }) => {
 
           {/* No show */}
           {appointment.status==='no_show'&&(
-            <div className="p-3 rounded-xl border-2 border-orange-300 bg-orange-50">
+            <div className="p-3 border-2 border-orange-300 rounded-xl bg-orange-50">
               <div className="flex items-center gap-2 mb-1"><AlertCircle className="w-4 h-4 text-orange-600"/><p className="text-sm font-bold text-orange-700">No se presentó</p></div>
               {appointment.no_show_notes&&<p className="text-xs text-orange-600">{appointment.no_show_notes}</p>}
             </div>
@@ -379,8 +379,8 @@ const DetailModal = ({ appointment, onClose, onEdit }) => {
 
           {/* Docs faltantes */}
           {appointment.has_missing_docs&&missingDocs.length>0&&(
-            <div className="p-3 rounded-xl border-2 border-red-300 bg-red-50 space-y-2">
-              <div className="flex items-center gap-2"><AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0"/><p className="text-sm font-bold text-red-700">⚠️ Documentos físicos no presentados</p></div>
+            <div className="p-3 space-y-2 border-2 border-red-300 rounded-xl bg-red-50">
+              <div className="flex items-center gap-2"><AlertCircle className="flex-shrink-0 w-4 h-4 text-red-600"/><p className="text-sm font-bold text-red-700">⚠️ Documentos físicos no presentados</p></div>
               <ul className="space-y-1">{missingDocs.map((d,i)=><li key={i} className="flex items-center gap-2 text-xs text-red-700"><XCircle className="w-3.5 h-3.5 flex-shrink-0"/>{d.label}</li>)}</ul>
             </div>
           )}
@@ -403,36 +403,36 @@ const DetailModal = ({ appointment, onClose, onEdit }) => {
           {/* Info proveedor */}
           {appointment.is_completed_by_provider?(
             <div className="p-3 rounded-xl bg-green-50 border border-green-200 space-y-1.5">
-              <p className="text-xs font-semibold text-green-700 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5"/>Proveedor completó su información</p>
+              <p className="flex items-center gap-1 text-xs font-semibold text-green-700"><CheckCircle className="w-3.5 h-3.5"/>Proveedor completó su información</p>
               {appointment.vehicle_display&&<div className="flex items-center gap-2"><Truck className="w-4 h-4 text-green-600"/><p className="text-sm text-green-800">{appointment.vehicle_display}</p></div>}
               {appointment.driver_display&&<div className="flex items-center gap-2"><User className="w-4 h-4 text-green-600"/><p className="text-sm text-green-800">{appointment.driver_display}</p></div>}
             </div>
           ):appointment.status!=='no_show'&&appointment.status!=='cancelled'&&(
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+            <div className="flex items-center gap-2 p-3 border rounded-xl bg-amber-50 border-amber-200">
               <Clock className="w-4 h-4 text-amber-500"/>
               <p className="text-xs text-amber-700">Esperando que el proveedor complete vehículo y chofer</p>
             </div>
           )}
 
-          {appointment.notes&&<div className="p-3 rounded-xl bg-gray-50 border border-gray-200"><p className="text-xs text-gray-500 mb-1">Observaciones</p><p className="text-sm text-gray-800">{appointment.notes}</p></div>}
+          {appointment.notes&&<div className="p-3 border border-gray-200 rounded-xl bg-gray-50"><p className="mb-1 text-xs text-gray-500">Observaciones</p><p className="text-sm text-gray-800">{appointment.notes}</p></div>}
 
           {appointment.has_attachment&&(
             <button onClick={()=>appointmentService.downloadAttachment(appointment.id,appointment.attachment_name)}
-              className="flex items-center gap-2 w-full p-3 rounded-xl bg-primary-50 border border-primary-200 hover:bg-primary-100 text-left">
+              className="flex items-center w-full gap-2 p-3 text-left border rounded-xl bg-primary-50 border-primary-200 hover:bg-primary-100">
               <Paperclip className="w-4 h-4 text-primary-600"/>
-              <div className="flex-1 min-w-0"><p className="text-xs text-primary-600">Adjunto</p><p className="text-sm font-semibold text-primary-800 truncate">{appointment.attachment_name}</p></div>
+              <div className="flex-1 min-w-0"><p className="text-xs text-primary-600">Adjunto</p><p className="text-sm font-semibold truncate text-primary-800">{appointment.attachment_name}</p></div>
               <Download className="w-4 h-4 text-primary-600"/>
             </button>
           )}
 
           {appointment.status==='cancelled'&&appointment.cancellation_reason&&(
-            <div className="p-3 rounded-xl bg-red-50 border border-red-200"><p className="text-xs text-red-600 mb-1">Motivo cancelación</p><p className="text-sm text-red-800">{appointment.cancellation_reason}</p></div>
+            <div className="p-3 border border-red-200 rounded-xl bg-red-50"><p className="mb-1 text-xs text-red-600">Motivo cancelación</p><p className="text-sm text-red-800">{appointment.cancellation_reason}</p></div>
           )}
 
           {showCancelForm&&(
-            <div className="p-4 rounded-xl border-2 border-red-200 bg-red-50 space-y-3">
+            <div className="p-4 space-y-3 border-2 border-red-200 rounded-xl bg-red-50">
               <p className="text-sm font-semibold text-red-800">¿Motivo de cancelación?</p>
-              <textarea value={cancelReason} onChange={e=>setCancelReason(e.target.value)} rows={2} className="w-full px-3 py-2 text-sm border border-red-300 rounded-lg focus:outline-none resize-none bg-white"/>
+              <textarea value={cancelReason} onChange={e=>setCancelReason(e.target.value)} rows={2} className="w-full px-3 py-2 text-sm bg-white border border-red-300 rounded-lg resize-none focus:outline-none"/>
               <div className="flex gap-2">
                 <Button variant="danger" size="sm" loading={cancelMutation.isPending} onClick={()=>cancelMutation.mutate()}>Confirmar</Button>
                 <Button variant="ghost" size="sm" onClick={()=>setShowCancelForm(false)}>Volver</Button>
@@ -520,14 +520,14 @@ export const AppointmentsPage = () => {
       </div>
 
       {view==='month'&&(
-        <div className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden">
+        <div className="overflow-hidden bg-white border-2 border-gray-200 rounded-xl">
           <div className="grid grid-cols-7 border-b border-gray-200">
-            {DAYS.map(d=><div key={d} className="py-3 text-xs font-bold text-center text-gray-500 uppercase tracking-wide">{d}</div>)}
+            {DAYS.map(d=><div key={d} className="py-3 text-xs font-bold tracking-wide text-center text-gray-500 uppercase">{d}</div>)}
           </div>
-          {isLoading?<div className="flex items-center justify-center h-64"><div className="w-10 h-10 border-4 border-t-primary-600 rounded-full animate-spin"/></div>:(
+          {isLoading?<div className="flex items-center justify-center h-64"><div className="w-10 h-10 border-4 rounded-full border-t-primary-600 animate-spin"/></div>:(
             <div className="grid grid-cols-7">
               {calendarCells.map((day,idx)=>{
-                if(!day)return<div key={`e-${idx}`} className="h-28 bg-gray-50 border-b border-r border-gray-100"/>;
+                if(!day)return<div key={`e-${idx}`} className="border-b border-r border-gray-100 h-28 bg-gray-50"/>;
                 const dateStr=`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                 const dayAppts=byDate[dateStr]||[];
                 const isToday=dateStr===todayStr;
@@ -539,8 +539,8 @@ export const AppointmentsPage = () => {
                     <div className="flex items-center justify-between mb-1">
                       <span className={`flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${isToday?'bg-primary-600 text-white':isPast?'text-gray-400':'text-gray-700 group-hover:bg-primary-100 group-hover:text-primary-700'}`}>{day}</span>
                       <div className="flex items-center gap-1">
-                        {hasMissing&&<span className="w-2 h-2 rounded-full bg-red-500" title="Docs faltantes"/>}
-                        {hasNoShow&&<span className="w-2 h-2 rounded-full bg-orange-400" title="No se presentó"/>}
+                        {hasMissing&&<span className="w-2 h-2 bg-red-500 rounded-full" title="Docs faltantes"/>}
+                        {hasNoShow&&<span className="w-2 h-2 bg-orange-400 rounded-full" title="No se presentó"/>}
                         {dayAppts.length>0&&<span className="text-xs font-bold text-gray-400">{dayAppts.length}</span>}
                       </div>
                     </div>
@@ -554,7 +554,7 @@ export const AppointmentsPage = () => {
                           {a.status==='no_show'&&<span className="w-1.5 h-1.5 rounded-full bg-orange-300 flex-shrink-0"/>}
                         </div>
                       ))}
-                      {dayAppts.length>3&&<p className="text-xs text-gray-400 text-center">+{dayAppts.length-3} más</p>}
+                      {dayAppts.length>3&&<p className="text-xs text-center text-gray-400">+{dayAppts.length-3} más</p>}
                     </div>
                   </div>
                 );
@@ -565,7 +565,7 @@ export const AppointmentsPage = () => {
       )}
 
       {view==='week'&&(
-        <div className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden">
+        <div className="overflow-hidden bg-white border-2 border-gray-200 rounded-xl">
           <div className="grid grid-cols-8 border-b border-gray-200">
             <div className="py-3 border-r border-gray-200"/>
             {weekDays.map((d,i)=>{const dateStr=fmt(d);const isToday=dateStr===todayStr;return(
@@ -578,7 +578,7 @@ export const AppointmentsPage = () => {
           <div className="overflow-y-auto max-h-[600px]">
             {HOURS.map(hour=>(
               <div key={hour} className="grid grid-cols-8 border-b border-gray-100 min-h-[56px]">
-                <div className="px-3 py-2 text-xs font-semibold text-gray-400 border-r border-gray-200 flex items-start pt-2">{hour}</div>
+                <div className="flex items-start px-3 py-2 pt-2 text-xs font-semibold text-gray-400 border-r border-gray-200">{hour}</div>
                 {weekDays.map((d,i)=>{
                   const dateStr=fmt(d);const isToday=dateStr===todayStr;
                   const hourAppts=(byDate[dateStr]||[]).filter(a=>a.appointment_time?.startsWith(hour.slice(0,2)));
@@ -589,7 +589,7 @@ export const AppointmentsPage = () => {
                           className={`px-2 py-1 rounded-lg text-xs font-medium text-white cursor-pointer hover:opacity-80 mb-1 ${typeColor(a.type)} ${a.status==='cancelled'?'opacity-40':''}`}>
                           <p className="font-bold">{a.appointment_time?.slice(0,5)}</p>
                           <p className="truncate">{a.provider?.business_name}</p>
-                          {a.status==='no_show'&&<p className="text-orange-200 text-xs">● No llegó</p>}
+                          {a.status==='no_show'&&<p className="text-xs text-orange-200">● No llegó</p>}
                         </div>
                       ))}
                     </div>
@@ -603,8 +603,8 @@ export const AppointmentsPage = () => {
 
       <div className="flex flex-wrap gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl">
         {TYPE_OPTIONS.map(t=><span key={t.value} className="flex items-center gap-1.5 text-xs font-medium text-gray-600"><span className={`w-3 h-3 rounded-full ${t.color}`}/>{t.label}</span>)}
-        <span className="flex items-center gap-1.5 text-xs font-medium text-red-500 ml-4"><span className="w-2 h-2 rounded-full bg-red-500"/>Docs faltantes</span>
-        <span className="flex items-center gap-1.5 text-xs font-medium text-orange-500"><span className="w-2 h-2 rounded-full bg-orange-400"/>No se presentó</span>
+        <span className="flex items-center gap-1.5 text-xs font-medium text-red-500 ml-4"><span className="w-2 h-2 bg-red-500 rounded-full"/>Docs faltantes</span>
+        <span className="flex items-center gap-1.5 text-xs font-medium text-orange-500"><span className="w-2 h-2 bg-orange-400 rounded-full"/>No se presentó</span>
       </div>
 
       {showModal&&<AppointmentModal appointment={editAppointment} preselectedDate={preselectedDate} onClose={()=>{setShowModal(false);setEditAppointment(null);}}/>}
