@@ -112,7 +112,15 @@ const AppointmentModal = ({ appointment, onClose, preselectedDate }) => {
     notes:appointment?.notes||'', status:appointment?.status||'scheduled', attachment:null,
   });
   const [items,setItems]=[useState(appointment?.items||[])][0];
-  const [itemsState,setItemsState]=useState(appointment?.items||[]);
+  const [itemsState, setItemsState] = useState(
+    (appointment?.items || []).map(item => ({
+      product_service_id: item.product_service_id,
+      product_name:       item.product_name,
+      product_type:       item.product_type,
+      quantity_expected:  item.quantity_expected || '',
+      unit_id:            item.unit?.id || item.unit_id || '',
+    }))
+  );
   const [error,setError]=useState('');
   const [confirmed,setConfirmed]=useState(false);
 
