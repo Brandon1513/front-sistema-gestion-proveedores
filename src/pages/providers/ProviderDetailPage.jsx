@@ -116,10 +116,10 @@ export const ProviderDetailPage = () => {
 
   // Tipos de documentos requeridos
   const { data: documentTypesData, isLoading: isLoadingDocTypes } = useQuery({
-    queryKey: ['provider-document-types', providerData?.provider_type_id],
-    queryFn: () => providerTypeService.getRequiredDocuments(providerData?.provider_type_id),
+    queryKey: ['provider-all-document-types', providerData?.provider_type_id],
+    queryFn: () => providerTypeService.getAllDocuments(providerData?.provider_type_id),
     enabled: !!providerData?.provider_type_id,
-  });
+});
 
   // ✅ Productos y servicios del catálogo
   const { data: providerProductsData } = useQuery({
@@ -131,7 +131,7 @@ export const ProviderDetailPage = () => {
     enabled: !!id,
   });
 
-  let documentTypes = [];
+  let documentTypes = documentTypesData?.document_types || [];
   if (documentTypesData?.required_documents) {
     if (Array.isArray(documentTypesData.required_documents)) documentTypes = documentTypesData.required_documents;
     else { const g = documentTypesData.required_documents; documentTypes = [...(g.fiscal||[]),...(g.legal||[]),...(g.quality||[]),...(g.technical||[])]; }

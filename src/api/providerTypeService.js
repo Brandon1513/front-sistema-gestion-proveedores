@@ -15,4 +15,9 @@ export const providerTypeService = {
     const response = await api.get(`/provider-types/${id}/required-documents`);
     return response.data;
   },
+
+  getAllDocuments: async (id) => {
+    const response = await api.get(`/provider-types/${id}/all-documents`);
+    return response.data;
+},
 };

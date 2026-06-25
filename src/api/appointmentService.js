@@ -9,7 +9,7 @@ export const appointmentService = {
   create: async (data) => {
     const fd = new FormData();
     // Campos simples
-    const simple = ['provider_id','appointment_date','appointment_time','type','notes','status','products'];
+    const simple = ['provider_id','appointment_date','appointment_time','duration_minutes','type','notes','status','products'];
     simple.forEach(k => { if (data[k] != null) fd.append(k, data[k]); });
     if (data.attachment) fd.append('attachment', data.attachment);
     // Items como JSON
@@ -20,7 +20,7 @@ export const appointmentService = {
   getById: async (id) => { const r = await api.get(`/appointments/${id}`); return r.data; },
   update: async (id, data) => {
     const fd = new FormData();
-    const simple = ['provider_id','appointment_date','appointment_time','type','notes','status'];
+    const simple = ['provider_id','appointment_date','appointment_time','duration_minutes','type','notes','status'];
     simple.forEach(k => { if (data[k] != null) fd.append(k, data[k]); });
     if (data.attachment) fd.append('attachment', data.attachment);
     if (data.items?.length) fd.append('items', JSON.stringify(data.items));
