@@ -33,6 +33,7 @@ import { SmartRedirect } from './components/auth/SmartRedirect';
 import { CatalogPage } from './pages/settings/CatalogPage';
 import { DocumentManagementPage } from './pages/settings/DocumentManagementPage'; 
 import { ProviderHelpPage } from './pages/providers/ProviderHelpPage';
+import { ProviderTypeManagementPage } from './pages/settings/ProviderTypeManagementPage';
 import './styles/custom-animations.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -145,6 +146,7 @@ function App() {
                 <DocumentManagementPage />
               </RoleProtectedRoute>
             } />
+            <Route path="/settings/provider-types" element={<ProviderTypeManagementPage />} />
 
             <Route path="profile" element={<MyProfilePage />} />
           </Route>

@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Users, FileText, CheckSquare, LogOut,
   Menu, X, Bell, BarChart3, Send, Shield, FlaskConical,
   Settings, FileCog, Package, ChevronDown, ChevronRight,
-  PanelLeftClose, PanelLeftOpen, Clock, AlertTriangle,
+  PanelLeftClose, PanelLeftOpen, Clock, AlertTriangle, Tag,
 } from 'lucide-react';
 
 export const DashboardLayout = () => {
@@ -89,6 +89,7 @@ export const DashboardLayout = () => {
   const settingsChildren = [
     { name: 'Catálogo de Productos', href: '/settings/catalog',   icon: Package,  roles: ['super_admin','admin','compras'] },
     { name: 'Tipos de Documentos',   href: '/settings/documents', icon: FileCog,  roles: ['super_admin','admin','calidad'] },
+    { name: 'Tipos de Proveedor',    href: '/settings/provider-types',  icon: Tag,      roles: ['super_admin','admin'] },
   ];
 
   const hasAccess = (itemRoles) => {
