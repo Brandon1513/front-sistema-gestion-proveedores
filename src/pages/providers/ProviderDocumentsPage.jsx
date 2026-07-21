@@ -16,7 +16,7 @@ import { canUploadDocument, getDaysLeft } from '../../utils/documentUploadRules'
 import {
   FileText, CheckCircle, Clock, AlertTriangle, Download,
   Eye, Upload, Calendar, Search, Trash2, Loader2, History,
-  Lock, Tag, Layers, Info, ChevronDown, ChevronUp,
+  Lock, Tag, Layers, Info, ChevronDown, ChevronUp, Package,
 } from 'lucide-react';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -51,26 +51,16 @@ const formatDate = (dateString) => {
 
 // ─── Subcomponente: fila de un documento individual ───────────────────────────
 const DocumentRow = ({
-  doc,
-  isHighlighted,
-  providerId,
-  downloadingId,
-  onDownload,
-  onDelete,
-  onViewHistory,
-  onViewDetail,
-  navigate,
+  doc, isHighlighted, providerId,
+  downloadingId, onDownload, onDelete, onViewHistory, onViewDetail, navigate,
 }) => {
   const [expanded, setExpanded] = useState(false);
 
-  // Para allows_multiple el backend devuelve `documents` (array)
-  // Para carga única devuelve `document` (objeto singular)
-  const isMultiple   = doc.allows_multiple;
-  const multiDocs    = doc.documents || [];           // array cuando allows_multiple
-  const singleDoc    = doc.uploaded_document || null; // objeto cuando carga única
+  const isMultiple = doc.allows_multiple;
+  const multiDocs  = doc.documents || [];
+  const singleDoc  = doc.uploaded_document || null;
 
-  // Estado general del tipo de documento
-  const status = isMultiple
+  const status   = isMultiple
     ? (multiDocs.length > 0 ? 'uploaded' : 'not_uploaded')
     : (singleDoc ? singleDoc.status : 'not_uploaded');
 
@@ -81,49 +71,97 @@ const DocumentRow = ({
     isMultiple ? { ...doc, uploaded: false } : doc
   );
 
+  // ✅ Agrupar documentos múltiples por producto
+  const groupedByProduct = React.useMemo(() => {
+    if (!isMultiple || multiDocs.length === 0) return {};
+    const groups = {};
+    multiDocs.forEach(mdoc => {
+      const key = mdoc.product_name || 'Sin producto';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(mdoc);
+    });
+    return groups;
+  }, [isMultiple, multiDocs]);
+
+  const productGroups  = Object.entries(groupedByProduct);
+  // ✅ Contar solo grupos con nombre real de producto
+  const namedProducts  = productGroups.filter(([k]) => k !== 'Sin producto');
+  const unnamedDocs    = productGroups.find(([k]) => k === 'Sin producto')?.[1] || [];
+  const approvedCount  = multiDocs.filter(d => d.status === 'approved').length;
+  const pendingCount   = multiDocs.filter(d => d.status === 'pending').length;
+  const rejectedCount  = multiDocs.filter(d => d.status === 'rejected').length;
+
+  // ✅ Badge: mostrar productos con nombre + archivos sin asignar
+  const badgeText = () => {
+    const parts = [];
+    if (namedProducts.length > 0)
+      parts.push(`${namedProducts.length} producto${namedProducts.length !== 1 ? 's' : ''}`);
+    if (unnamedDocs.length > 0)
+      parts.push(`${unnamedDocs.length} sin producto`);
+    return parts.join(' · ') || `${multiDocs.length} archivo${multiDocs.length !== 1 ? 's' : ''}`;
+  };
+
   return (
-    <div
-      className={`rounded-xl border-2 transition-all duration-200
-        ${isHighlighted
-          ? 'border-alert-400 bg-alert-50 shadow-md'
-          : 'border-gray-200 hover:bg-gray-50 hover:border-primary-200'}`}
-    >
-      {/* ── Fila principal ────────────────────────────────────────────────── */}
+    <div className={`rounded-xl border-2 transition-all duration-200 ${
+      isHighlighted
+        ? 'border-alert-400 bg-alert-50 shadow-md'
+        : 'border-gray-200 hover:bg-gray-50 hover:border-primary-200'
+    }`}>
+      {/* ── Fila principal ─────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center flex-1 min-w-0 gap-4">
-          <div className={`flex items-center justify-center w-12 h-12 rounded-lg shadow-md flex-shrink-0
-            ${isHighlighted ? 'bg-gradient-to-br from-alert-500 to-alert-600' : 'bg-gradient-primary'}`}>
-            <FileText className="w-6 h-6 text-white" />
+          <div className={`flex items-center justify-center w-12 h-12 rounded-lg shadow-md flex-shrink-0 ${
+            isHighlighted ? 'bg-gradient-to-br from-alert-500 to-alert-600' : 'bg-gradient-primary'
+          }`}>
+            <FileText className="w-6 h-6 text-white"/>
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-bold text-gray-900 truncate">{doc.name}</p>
               {doc.is_required && <Badge variant="expired">Requerido</Badge>}
-              {isMultiple && (
+              {/* ✅ Badge con conteo correcto */}
+              {isMultiple && multiDocs.length > 0 && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
-                  <Layers className="w-3 h-3" />
-                  {multiDocs.length} archivo{multiDocs.length !== 1 ? 's' : ''}
+                  <Package className="w-3 h-3"/>
+                  {badgeText()}
                 </span>
               )}
               {isHighlighted && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-alert-100 text-alert-700 border border-alert-300">
-                  <AlertTriangle className="w-3 h-3" />
-                  Requiere renovación
+                  <AlertTriangle className="w-3 h-3"/>Requiere renovación
                 </span>
               )}
             </div>
 
             {/* Resumen de estado */}
-            <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+            <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-gray-600">
               {isMultiple ? (
-                multiDocs.length > 0
-                  ? <span className="text-gray-500">{multiDocs.length} producto(s) registrado(s)</span>
-                  : <span className="text-gray-400">Sin archivos cargados</span>
+                multiDocs.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {approvedCount > 0 && (
+                      <span className="flex items-center gap-1 text-xs font-medium text-green-600">
+                        <CheckCircle className="w-3 h-3"/>{approvedCount} aprobado{approvedCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {pendingCount > 0 && (
+                      <span className="flex items-center gap-1 text-xs font-medium text-amber-600">
+                        <Clock className="w-3 h-3"/>{pendingCount} en revisión
+                      </span>
+                    )}
+                    {rejectedCount > 0 && (
+                      <span className="flex items-center gap-1 text-xs font-medium text-red-600">
+                        <AlertTriangle className="w-3 h-3"/>{rejectedCount} rechazado{rejectedCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-gray-400">Sin archivos cargados</span>
+                )
               ) : (
                 singleDoc ? (
                   <>
                     <span className="flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5" />
+                      <Calendar className="w-3.5 h-3.5"/>
                       Cargado: {formatDate(singleDoc.uploaded_at || singleDoc.created_at)}
                     </span>
                     {singleDoc.expiry_date && (
@@ -131,8 +169,7 @@ const DocumentRow = ({
                     )}
                     {singleDoc.product_name && (
                       <span className="flex items-center gap-1 text-primary-600">
-                        <Tag className="w-3 h-3" />
-                        {singleDoc.product_name}
+                        <Tag className="w-3 h-3"/>{singleDoc.product_name}
                       </span>
                     )}
                   </>
@@ -146,22 +183,14 @@ const DocumentRow = ({
 
         {/* Acciones */}
         <div className="flex items-center flex-shrink-0 gap-2 ml-4">
-          {!isMultiple && urgencyVar && (
-            <Badge variant={urgencyVar}>{getUrgencyText(daysLeft)}</Badge>
-          )}
+          {!isMultiple && urgencyVar && <Badge variant={urgencyVar}>{getUrgencyText(daysLeft)}</Badge>}
+          {!isMultiple && <Badge variant={getStatusVariant(status)}>{getStatusText(status)}</Badge>}
 
-          {/* Badge de estado — para múltiples mostramos conteo */}
-          {!isMultiple && (
-            <Badge variant={getStatusVariant(status)}>{getStatusText(status)}</Badge>
-          )}
-
-          {/* Expandir lista — solo para allows_multiple */}
+          {/* Expandir para múltiples */}
           {isMultiple && multiDocs.length > 0 && (
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-primary-700 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100 transition-colors"
-            >
-              {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            <button onClick={() => setExpanded(!expanded)}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-primary-700 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100 transition-colors">
+              {expanded ? <ChevronUp className="w-3.5 h-3.5"/> : <ChevronDown className="w-3.5 h-3.5"/>}
               {expanded ? 'Ocultar' : 'Ver archivos'}
             </button>
           )}
@@ -169,81 +198,43 @@ const DocumentRow = ({
           {/* Acciones carga única */}
           {!isMultiple && singleDoc && (
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => onViewHistory(singleDoc.id)}
-                className="p-2 text-blue-600 transition-colors rounded-lg hover:bg-blue-50"
-                title="Historial"
-              >
-                <History className="w-5 h-5" />
+              <button onClick={() => onViewHistory(singleDoc.id)} className="p-2 text-blue-600 rounded-lg hover:bg-blue-50" title="Historial">
+                <History className="w-5 h-5"/>
               </button>
-              <button
-                onClick={() => onViewDetail({ ...singleDoc, provider_id: providerId })}
-                className="p-2 text-blue-600 transition-colors rounded-lg hover:bg-blue-50"
-                title="Ver"
-              >
-                <Eye className="w-5 h-5" />
+              <button onClick={() => onViewDetail({ ...singleDoc, provider_id: providerId })} className="p-2 text-blue-600 rounded-lg hover:bg-blue-50" title="Ver">
+                <Eye className="w-5 h-5"/>
               </button>
-              <button
-                onClick={() => onDownload(singleDoc.id)}
-                disabled={downloadingId === singleDoc.id}
-                className="p-2 text-green-600 transition-colors rounded-lg hover:bg-green-50"
-                title="Descargar"
-              >
-                {downloadingId === singleDoc.id
-                  ? <Loader2 className="w-5 h-5 animate-spin" />
-                  : <Download className="w-5 h-5" />
-                }
+              <button onClick={() => onDownload(singleDoc.id)} disabled={downloadingId === singleDoc.id} className="p-2 text-green-600 rounded-lg hover:bg-green-50" title="Descargar">
+                {downloadingId === singleDoc.id ? <Loader2 className="w-5 h-5 animate-spin"/> : <Download className="w-5 h-5"/>}
               </button>
               {(status === 'pending' || status === 'rejected') && (
-                <button
-                  onClick={() => onDelete(doc)}
-                  className="p-2 text-red-600 transition-colors rounded-lg hover:bg-red-50"
-                  title="Eliminar"
-                >
-                  <Trash2 className="w-5 h-5" />
+                <button onClick={() => onDelete(doc)} className="p-2 text-red-600 rounded-lg hover:bg-red-50" title="Eliminar">
+                  <Trash2 className="w-5 h-5"/>
                 </button>
               )}
             </div>
           )}
 
-          {/* Botón subir */}
+          {/* Botón agregar/cargar */}
           {isMultiple ? (
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<Upload className="w-4 h-4" />}
-              onClick={() => navigate(`/provider/upload?document=${doc.id}`)}
-            >
+            <Button variant="primary" size="sm" leftIcon={<Upload className="w-4 h-4"/>}
+              onClick={() => navigate(`/provider/upload?document=${doc.id}`)}>
               Agregar
             </Button>
           ) : !singleDoc ? (
-            <Button
-              variant={isHighlighted ? 'danger' : 'primary'}
-              size="sm"
-              leftIcon={<Upload className="w-4 h-4" />}
-              onClick={() => navigate(`/provider/upload?document=${doc.id}`)}
-            >
+            <Button variant={isHighlighted ? 'danger' : 'primary'} size="sm" leftIcon={<Upload className="w-4 h-4"/>}
+              onClick={() => navigate(`/provider/upload?document=${doc.id}`)}>
               Cargar
             </Button>
           ) : canUpload ? (
-            <button
-              onClick={() => navigate(`/provider/upload?document=${doc.id}`)}
-              className={`p-2 rounded-lg transition-colors ${
-                isHighlighted
-                  ? 'text-white bg-alert-500 hover:bg-alert-600'
-                  : 'text-primary-600 hover:bg-primary-50'
-              }`}
-              title="Renovar documento"
-            >
-              <Upload className="w-5 h-5" />
+            <button onClick={() => navigate(`/provider/upload?document=${doc.id}`)}
+              className={`p-2 rounded-lg transition-colors ${isHighlighted ? 'text-white bg-alert-500 hover:bg-alert-600' : 'text-primary-600 hover:bg-primary-50'}`}
+              title="Renovar documento">
+              <Upload className="w-5 h-5"/>
             </button>
           ) : (
-            <button
-              className="p-2 text-gray-300 rounded-lg cursor-not-allowed"
-              title={blockReason}
-              disabled
-            >
-              <Lock className="w-5 h-5" />
+            <button className="p-2 text-gray-300 rounded-lg cursor-not-allowed" title={blockReason} disabled>
+              <Lock className="w-5 h-5"/>
             </button>
           )}
         </div>
@@ -252,88 +243,86 @@ const DocumentRow = ({
       {/* Leyenda de bloqueo */}
       {!isMultiple && singleDoc && !canUpload && (
         <div className="flex items-center gap-2 px-4 pb-3">
-          <Lock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+          <Lock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0"/>
           <p className="text-xs text-gray-500">{blockReason}</p>
         </div>
       )}
 
-      {/* ── Lista expandible para allows_multiple ─────────────────────────── */}
+      {/* ── Lista expandible agrupada por producto ─────────────────────────── */}
       {isMultiple && expanded && multiDocs.length > 0 && (
-        <div className="px-4 pt-3 pb-4 space-y-2 border-t border-gray-100">
-          {multiDocs.map((mdoc) => {
-            const mdaysLeft  = getDaysLeft(mdoc.expiry_date);
-            const murgency   = getUrgencyVariant(mdaysLeft);
-            const isDownloading = downloadingId === mdoc.id;
-
-            return (
-              <div
-                key={mdoc.id}
-                className="flex items-center justify-between px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg"
-              >
-                <div className="flex items-center flex-1 min-w-0 gap-3">
-                  <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 bg-white border border-gray-200 rounded-lg">
-                    <FileText className="w-4 h-4 text-gray-500" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    {/* Nombre del producto si existe */}
-                    {mdoc.product_name && (
-                      <p className="flex items-center gap-1 text-sm font-semibold text-gray-800 truncate">
-                        <Tag className="flex-shrink-0 w-3 h-3 text-primary-500" />
-                        {mdoc.product_name}
-                      </p>
-                    )}
-                    <p className="text-xs text-gray-500 truncate">{mdoc.original_filename}</p>
-                    {mdoc.expiry_date && (
-                      <p className="text-xs text-gray-400">Vence: {formatDate(mdoc.expiry_date)}</p>
-                    )}
-                  </div>
+        <div className="px-4 pt-3 pb-4 space-y-4 border-t border-gray-100">
+          {productGroups.map(([productName, productDocs]) => (
+            <div key={productName}>
+              {/* ✅ Encabezado del grupo — nombre del producto o "Sin producto asignado" */}
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`flex items-center justify-center flex-shrink-0 w-6 h-6 rounded-full ${
+                  productName === 'Sin producto' ? 'bg-gray-100' : 'bg-primary-100'
+                }`}>
+                  <Package className={`w-3.5 h-3.5 ${productName === 'Sin producto' ? 'text-gray-400' : 'text-primary-600'}`}/>
                 </div>
-
-                <div className="flex items-center flex-shrink-0 gap-2 ml-3">
-                  {murgency && (
-                    <Badge variant={murgency}>{getUrgencyText(mdaysLeft)}</Badge>
-                  )}
-                  <Badge variant={getStatusVariant(mdoc.status)}>
-                    {getStatusText(mdoc.status)}
-                  </Badge>
-                  <button
-                    onClick={() => onViewHistory(mdoc.id)}
-                    className="p-1.5 text-blue-600 rounded-lg hover:bg-blue-50"
-                    title="Historial"
-                  >
-                    <History className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onViewDetail({ ...mdoc, provider_id: providerId })}
-                    className="p-1.5 text-blue-600 rounded-lg hover:bg-blue-50"
-                    title="Ver"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onDownload(mdoc.id)}
-                    disabled={isDownloading}
-                    className="p-1.5 text-green-600 rounded-lg hover:bg-green-50"
-                    title="Descargar"
-                  >
-                    {isDownloading
-                      ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : <Download className="w-4 h-4" />
-                    }
-                  </button>
-                  {(mdoc.status === 'pending' || mdoc.status === 'rejected') && (
-                    <button
-                      onClick={() => onDelete({ ...doc, uploaded_document: mdoc })}
-                      className="p-1.5 text-red-600 rounded-lg hover:bg-red-50"
-                      title="Eliminar"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
+                <p className={`text-sm font-bold ${productName === 'Sin producto' ? 'italic text-gray-400' : 'text-gray-800'}`}>
+                  {productName === 'Sin producto' ? 'Sin producto asignado' : productName}
+                </p>
+                <span className="text-xs text-gray-400">
+                  ({productDocs.length} archivo{productDocs.length !== 1 ? 's' : ''})
+                </span>
               </div>
-            );
-          })}
+
+              {/* Archivos del grupo */}
+              <div className="ml-8 space-y-2">
+                {productDocs.map((mdoc) => {
+                  const mdaysLeft    = getDaysLeft(mdoc.expiry_date);
+                  const murgency     = getUrgencyVariant(mdaysLeft);
+                  const isDownloading = downloadingId === mdoc.id;
+
+                  return (
+                    <div key={mdoc.id}
+                      className="flex items-center justify-between px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl">
+                      <div className="flex items-center flex-1 min-w-0 gap-3">
+                        <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 bg-white border border-gray-200 rounded-lg">
+                          <FileText className="w-4 h-4 text-gray-500"/>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-500 truncate">{mdoc.original_filename}</p>
+                          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                            {mdoc.issue_date && (
+                              <span className="text-xs text-gray-400">
+                                Emisión: {formatDate(mdoc.issue_date)}
+                              </span>
+                            )}
+                            {mdoc.expiry_date && (
+                              <span className="text-xs text-gray-400">
+                                Vence: {formatDate(mdoc.expiry_date)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center flex-shrink-0 gap-2 ml-3">
+                        {murgency && <Badge variant={murgency}>{getUrgencyText(mdaysLeft)}</Badge>}
+                        <Badge variant={getStatusVariant(mdoc.status)}>{getStatusText(mdoc.status)}</Badge>
+                        <button onClick={() => onViewHistory(mdoc.id)} className="p-1.5 text-blue-600 rounded-lg hover:bg-blue-50" title="Historial">
+                          <History className="w-4 h-4"/>
+                        </button>
+                        <button onClick={() => onViewDetail({ ...mdoc, provider_id: providerId })} className="p-1.5 text-blue-600 rounded-lg hover:bg-blue-50" title="Ver">
+                          <Eye className="w-4 h-4"/>
+                        </button>
+                        <button onClick={() => onDownload(mdoc.id)} disabled={isDownloading} className="p-1.5 text-green-600 rounded-lg hover:bg-green-50" title="Descargar">
+                          {isDownloading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4"/>}
+                        </button>
+                        {(mdoc.status === 'pending' || mdoc.status === 'rejected') && (
+                          <button onClick={() => onDelete({ ...doc, uploaded_document: mdoc })} className="p-1.5 text-red-600 rounded-lg hover:bg-red-50" title="Eliminar">
+                            <Trash2 className="w-4 h-4"/>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -345,8 +334,8 @@ export const ProviderDocumentsPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
-  const [searchTerm, setSearchTerm]         = useState(searchParams.get('search') || '');
-  const [filterStatus, setFilterStatus]     = useState('all');
+  const [searchTerm, setSearchTerm]             = useState(searchParams.get('search') || '');
+  const [filterStatus, setFilterStatus]         = useState('all');
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [showDetailModal, setShowDetailModal]   = useState(false);
   const [downloadingId, setDownloadingId]       = useState(null);
@@ -406,29 +395,26 @@ export const ProviderDocumentsPage = () => {
         </div>
       </div>
     ), {
-      duration: Infinity,
-      position: 'top-center',
+      duration: Infinity, position: 'top-center',
       style: { maxWidth: '450px', padding: '20px', borderRadius: '16px', border: '2px solid #E5E7EB' },
     });
   };
 
-  // ─── Separar obligatorios y recomendados ──────────────────────────────────
   const allDocs         = requiredData?.required_documents || [];
   const requiredDocs    = allDocs.filter(d => d.is_required);
   const recommendedDocs = allDocs.filter(d => !d.is_required);
 
-  // Filtrar con búsqueda y estado
   const applyFilters = (docs) => docs.filter((doc) => {
     if (searchTerm && !doc.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
     if (filterStatus !== 'all') {
       const isMultiple = doc.allows_multiple;
       const uploaded   = isMultiple ? (doc.documents?.length > 0) : doc.uploaded;
       const status     = isMultiple ? null : doc.uploaded_document?.status;
-      if (filterStatus === 'uploaded'     && !uploaded)              return false;
-      if (filterStatus === 'not_uploaded' && uploaded)               return false;
-      if (filterStatus === 'approved'     && status !== 'approved')  return false;
-      if (filterStatus === 'pending'      && status !== 'pending')   return false;
-      if (filterStatus === 'rejected'     && status !== 'rejected')  return false;
+      if (filterStatus === 'uploaded'     && !uploaded)             return false;
+      if (filterStatus === 'not_uploaded' && uploaded)              return false;
+      if (filterStatus === 'approved'     && status !== 'approved') return false;
+      if (filterStatus === 'pending'      && status !== 'pending')  return false;
+      if (filterStatus === 'rejected'     && status !== 'rejected') return false;
     }
     return true;
   });
@@ -436,7 +422,6 @@ export const ProviderDocumentsPage = () => {
   const filteredRequired    = applyFilters(requiredDocs);
   const filteredRecommended = applyFilters(recommendedDocs);
 
-  // Stats (solo sobre obligatorios)
   const stats = {
     total:    requiredDocs.length,
     uploaded: requiredDocs.filter(d => d.allows_multiple ? d.documents?.length > 0 : d.uploaded).length,
@@ -445,8 +430,7 @@ export const ProviderDocumentsPage = () => {
   };
 
   const rowProps = {
-    providerId,
-    downloadingId,
+    providerId, downloadingId,
     onDownload:    handleDownload,
     onDelete:      handleDelete,
     onViewHistory: (id) => { setSelectedDocumentId(id); setShowHistoryModal(true); },
@@ -458,7 +442,7 @@ export const ProviderDocumentsPage = () => {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 border-4 rounded-full border-t-primary border-r-primary border-b-transparent border-l-transparent animate-spin" />
+          <div className="w-16 h-16 mx-auto mb-4 border-4 rounded-full border-t-primary border-r-primary border-b-transparent border-l-transparent animate-spin"/>
           <p className="text-gray-600">Cargando documentos...</p>
         </div>
       </div>
@@ -467,12 +451,11 @@ export const ProviderDocumentsPage = () => {
 
   return (
     <div className="space-y-6">
-
       {/* Header */}
       <div className="p-6 border-2 rounded-xl bg-gradient-to-r from-primary-50 to-pink-50 border-primary-200">
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-12 h-12 rounded-lg shadow-md bg-gradient-primary">
-            <FileText className="w-6 h-6 text-white" />
+            <FileText className="w-6 h-6 text-white"/>
           </div>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Mis Documentos</h1>
@@ -485,15 +468,13 @@ export const ProviderDocumentsPage = () => {
       {searchParams.get('search') && (
         <div className="flex items-center justify-between px-4 py-3 border-2 rounded-xl bg-alert-50 border-alert-200">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="flex-shrink-0 w-4 h-4 text-alert-600" />
+            <AlertTriangle className="flex-shrink-0 w-4 h-4 text-alert-600"/>
             <p className="text-sm font-medium text-alert-800">
               Mostrando resultado para: <span className="font-bold">"{searchParams.get('search')}"</span>
             </p>
           </div>
-          <button
-            onClick={() => { setSearchTerm(''); navigate('/provider/documents', { replace: true }); }}
-            className="text-xs font-semibold underline text-alert-600 hover:text-alert-800"
-          >
+          <button onClick={() => { setSearchTerm(''); navigate('/provider/documents', { replace: true }); }}
+            className="text-xs font-semibold underline text-alert-600 hover:text-alert-800">
             Ver todos
           </button>
         </div>
@@ -514,10 +495,10 @@ export const ProviderDocumentsPage = () => {
                 <p className={`mt-2 text-3xl font-bold text-${color}-600`}>{value}</p>
               </div>
               <div className={`p-3 rounded-lg shadow-md bg-gradient-to-br from-${color}-500 to-${color}-600`}>
-                <Icon className="w-6 h-6 text-white" />
+                <Icon className="w-6 h-6 text-white"/>
               </div>
             </div>
-            <div className={`absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-${color}-500 to-${color}-600`} />
+            <div className={`absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-${color}-500 to-${color}-600`}/>
           </div>
         ))}
       </div>
@@ -527,7 +508,7 @@ export const ProviderDocumentsPage = () => {
         <div className="p-4 border-2 border-blue-200 rounded-xl bg-blue-50">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center flex-shrink-0 w-10 h-10 bg-blue-500 rounded-lg shadow-md">
-              <FileText className="w-5 h-5 text-white" />
+              <FileText className="w-5 h-5 text-white"/>
             </div>
             <div>
               <p className="font-bold text-blue-900">Tipo de Proveedor: {requiredData.provider_type.name}</p>
@@ -540,19 +521,12 @@ export const ProviderDocumentsPage = () => {
       {/* Filtros */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <Input
-            label="Buscar documento"
-            type="text"
-            placeholder="Buscar por nombre..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            leftIcon={<Search className="w-4 h-4 text-gray-400" />}
-          />
+          <Input label="Buscar documento" type="text" placeholder="Buscar por nombre..."
+            value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+            leftIcon={<Search className="w-4 h-4 text-gray-400"/>}/>
         </div>
         <div className="sm:w-64">
-          <Select
-            label="Filtrar por estado"
-            value={filterStatus}
+          <Select label="Filtrar por estado" value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             options={[
               { value: 'all',          label: 'Todos' },
@@ -561,16 +535,15 @@ export const ProviderDocumentsPage = () => {
               { value: 'approved',     label: 'Aprobados' },
               { value: 'pending',      label: 'En Revisión' },
               { value: 'rejected',     label: 'Rechazados' },
-            ]}
-          />
+            ]}/>
         </div>
       </div>
 
-      {/* ── Sección: Documentación Obligatoria ─────────────────────────────── */}
+      {/* ── Documentación Obligatoria ────────────────────────────────────────── */}
       <div className="bg-white border-2 border-gray-200 shadow-sm rounded-xl">
         <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
           <div className="flex items-center justify-center w-8 h-8 bg-red-100 rounded-lg">
-            <FileText className="w-4 h-4 text-red-600" />
+            <FileText className="w-4 h-4 text-red-600"/>
           </div>
           <div>
             <h2 className="font-bold text-gray-900">Documentación Obligatoria</h2>
@@ -580,53 +553,44 @@ export const ProviderDocumentsPage = () => {
         <div className="p-4 space-y-3">
           {filteredRequired.length > 0 ? (
             filteredRequired.map((doc) => (
-              <DocumentRow
-                key={doc.id}
-                doc={doc}
+              <DocumentRow key={doc.id} doc={doc}
                 isHighlighted={
                   !!searchParams.get('search') &&
                   doc.name.toLowerCase().includes(searchParams.get('search').toLowerCase())
                 }
-                {...rowProps}
-              />
+                {...rowProps}/>
             ))
           ) : (
             <div className="py-10 text-center text-gray-400">
-              <FileText className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+              <FileText className="w-8 h-8 mx-auto mb-2 text-gray-300"/>
               <p className="text-sm">No se encontraron documentos obligatorios</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Sección: Documentación Recomendada ─────────────────────────────── */}
+      {/* ── Documentación Recomendada ────────────────────────────────────────── */}
       {(recommendedDocs.length > 0 || filteredRecommended.length > 0) && (
         <div className="bg-white border-2 shadow-sm border-amber-200 rounded-xl">
           <div className="flex items-start gap-3 px-6 py-4 border-b border-amber-100 bg-amber-50 rounded-t-xl">
             <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 bg-amber-100 rounded-lg mt-0.5">
-              <Info className="w-4 h-4 text-amber-600" />
+              <Info className="w-4 h-4 text-amber-600"/>
             </div>
             <div>
               <h2 className="font-bold text-amber-900">Documentación Recomendada</h2>
               <p className="text-xs text-amber-700 mt-0.5">
                 Aunque no es obligatoria, esta documentación es necesaria para el proceso de evaluación.
-                Te recomendamos tenerla disponible.
               </p>
             </div>
           </div>
           <div className="p-4 space-y-3">
             {filteredRecommended.length > 0 ? (
               filteredRecommended.map((doc) => (
-                <DocumentRow
-                  key={doc.id}
-                  doc={doc}
-                  isHighlighted={false}
-                  {...rowProps}
-                />
+                <DocumentRow key={doc.id} doc={doc} isHighlighted={false} {...rowProps}/>
               ))
             ) : (
               <div className="py-10 text-center text-gray-400">
-                <CheckCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                <CheckCircle className="w-8 h-8 mx-auto mb-2 text-gray-300"/>
                 <p className="text-sm">No se encontraron documentos recomendados</p>
               </div>
             )}
@@ -635,16 +599,12 @@ export const ProviderDocumentsPage = () => {
       )}
 
       {showDetailModal && (
-        <DocumentDetailModal
-          document={selectedDocument}
-          onClose={() => { setShowDetailModal(false); setSelectedDocument(null); }}
-        />
+        <DocumentDetailModal document={selectedDocument}
+          onClose={() => { setShowDetailModal(false); setSelectedDocument(null); }}/>
       )}
       {showHistoryModal && (
-        <ValidationHistoryModal
-          documentId={selectedDocumentId}
-          onClose={() => { setShowHistoryModal(false); setSelectedDocumentId(null); }}
-        />
+        <ValidationHistoryModal documentId={selectedDocumentId}
+          onClose={() => { setShowHistoryModal(false); setSelectedDocumentId(null); }}/>
       )}
     </div>
   );
