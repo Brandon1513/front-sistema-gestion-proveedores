@@ -1,263 +1,358 @@
 import React, { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { providerProfileService } from '../../../api/providerProfileService';
+import { providerService } from '../../../api/providerService';
+import { showToast } from '../../../utils/toast';
 import { Button } from '../../common/Button';
 import { Input } from '../../common/Input';
-import {
-  Building2, Mail, Phone, MapPin, Save, X, Edit2,
-  AlertCircle, CreditCard, User, Info,
-} from 'lucide-react';
-import { showToast } from '../../../utils/toast';
+import { Edit2, Save, X, MapPin, Phone, CreditCard, Building2 } from 'lucide-react';
 
-const ESTADOS_MEXICO = [
-  'Aguascalientes','Baja California','Baja California Sur','Campeche',
-  'Chiapas','Chihuahua','Coahuila','Colima','Durango','Guanajuato',
-  'Guerrero','Hidalgo','Jalisco','CDMX','Michoacán','Morelos',
-  'Nayarit','Nuevo León','Oaxaca','Puebla','Querétaro','Quintana Roo',
-  'San Luis Potosí','Sinaloa','Sonora','Tabasco','Tamaulipas',
-  'Tlaxcala','Veracruz','Yucatán','Zacatecas',
+const MEXICAN_STATES = [
+  'Aguascalientes','Baja California','Baja California Sur','Campeche','Chiapas',
+  'Chihuahua','Ciudad de México','Coahuila','Colima','Durango','Estado de México',
+  'Guanajuato','Guerrero','Hidalgo','Jalisco','Michoacán','Morelos','Nayarit',
+  'Nuevo León','Oaxaca','Puebla','Querétaro','Quintana Roo','San Luis Potosí',
+  'Sinaloa','Sonora','Tabasco','Tamaulipas','Tlaxcala','Veracruz','Yucatán','Zacatecas',
 ];
 
-const CIUDADES_POR_ESTADO = {
-  'Jalisco':    ['Guadalajara','Zapopan','Tlaquepaque','Tonalá','Tlajomulco de Zúñiga','El Salto','Puerto Vallarta','Lagos de Moreno','Tepatitlán','Zapotlanejo','Otra'],
-  'CDMX':     ['Toluca','Ecatepec','Naucalpan','Tlalnepantla','Nezahualcóyotl','Otra'],
-  'Nuevo León': ['Monterrey','Guadalupe','San Nicolás de los Garza','Apodaca','Otra'],
-};
-
-const Section = ({ icon: Icon, title, children }) => (
-  <div className="p-5 bg-white border-2 border-gray-200 rounded-xl">
-    <h3 className="flex items-center gap-2 mb-4 text-base font-bold text-gray-900">
-      <Icon className="w-5 h-5 text-primary-600" />
-      {title}
-    </h3>
-    {children}
+const InfoRow = ({ label, value, mono = false }) => (
+  <div className="flex flex-col gap-0.5">
+    <span className="text-xs font-semibold tracking-wide text-gray-500 uppercase">{label}</span>
+    <span className={`text-sm font-medium text-gray-900 ${mono ? 'font-mono' : ''}`}>
+      {value || <span className="italic text-gray-400">No especificado</span>}
+    </span>
   </div>
 );
 
-export const GeneralInfoTab = ({ provider }) => {
+export const GeneralInfoTab = ({ provider, canEdit = false }) => {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
+  const [errors,    setErrors]    = useState({});
 
-  const buildForm = (p) => ({
-    business_name:        p?.business_name        || '',
-    rfc:                  p?.rfc                  || '',
-    legal_representative: p?.legal_representative || '',
-    phone:                p?.phone                || '',
-    street:               p?.street               || '',
-    exterior_number:      p?.exterior_number      || '',
-    interior_number:      p?.interior_number      || '',
-    neighborhood:         p?.neighborhood         || '',
-    city:                 p?.city                 || '',
-    state:                p?.state                || 'Jalisco',
-    postal_code:          p?.postal_code          || '',
-    country:              p?.country              || 'México',
-    bank:                 p?.bank                 || '',
-    bank_branch:          p?.bank_branch          || '',
-    account_number:       p?.account_number       || '',
-    clabe:                p?.clabe                || '',
-    // Crédito — NO se incluye en el form, solo se muestra en modo lectura
+  const [form, setForm] = useState({
+    business_name:        provider.business_name        || '',
+    rfc:                  provider.rfc                  || '',
+    tipo_persona:         provider.tipo_persona         || (provider.rfc?.length === 13 ? 'fisica' : 'moral'),
+    legal_representative: provider.legal_representative || '',
+    phone:                provider.phone                || '',
+    email:                provider.email                || '',
+    street:               provider.street               || '',
+    exterior_number:      provider.exterior_number      || '',
+    interior_number:      provider.interior_number      || '',
+    neighborhood:         provider.neighborhood         || '',
+    city:                 provider.city                 || '',
+    state:                provider.state                || '',
+    postal_code:          provider.postal_code          || '',
+    bank:                 provider.bank                 || '',
+    bank_branch:          provider.bank_branch          || '',
+    account_number:       provider.account_number       || '',
+    clabe:                provider.clabe                || '',
+    credit_amount:        provider.credit_amount        || '',
+    credit_days:          provider.credit_days          || '',
+    observations:         provider.observations         || '',
   });
 
-  const [formData, setFormData] = useState(buildForm(provider));
-  const [customCity, setCustomCity] = useState('');
-
-  const updateMutation = useMutation({
-    mutationFn: providerProfileService.updateProfile,
+  const mutation = useMutation({
+    mutationFn: (data) => providerService.update(provider.id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['provider-profile']);
+      queryClient.invalidateQueries({ queryKey: ['provider', provider.id], exact: false });
+      showToast.success('Información actualizada correctamente');
       setIsEditing(false);
-      showToast.success('✓ Información actualizada correctamente');
+      setErrors({});
     },
-    onError: (error) => {
-      showToast.error(error.response?.data?.message || 'Error al actualizar información');
+    onError: (err) => {
+      const apiErrors = err.response?.data?.errors || {};
+      setErrors(apiErrors);
+      showToast.error(err.response?.data?.message || 'Error al actualizar');
     },
   });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'postal_code') { setFormData({ ...formData, [name]: value.replace(/[^0-9]/g, '').slice(0, 5) }); return; }
-    if (name === 'clabe')       { setFormData({ ...formData, [name]: value.replace(/[^0-9]/g, '').slice(0, 18) }); return; }
-    if (name === 'state')       { setFormData({ ...formData, state: value, city: '' }); setCustomCity(''); return; }
-    if (name === 'city' && value === 'Otra') { setFormData({ ...formData, city: '' }); setCustomCity(''); return; }
-    setFormData({ ...formData, [name]: value });
+
+    // ✅ Auto-detectar tipo_persona al editar RFC
+    if (name === 'rfc') {
+      const rfcUpper = value.toUpperCase();
+      const tipoPersona = rfcUpper.length === 13 ? 'fisica' : 'moral';
+      setForm(f => ({ ...f, rfc: rfcUpper, tipo_persona: tipoPersona }));
+      if (errors.rfc) setErrors(p => ({ ...p, rfc: null }));
+      return;
+    }
+
+    setForm(f => ({ ...f, [name]: value }));
+    if (errors[name]) setErrors(p => ({ ...p, [name]: null }));
   };
 
-  const handleCustomCityChange = (e) => {
-    setCustomCity(e.target.value);
-    setFormData({ ...formData, city: e.target.value });
+  const handleCancel = () => {
+    setForm({
+      business_name:        provider.business_name        || '',
+      rfc:                  provider.rfc                  || '',
+      tipo_persona:         provider.tipo_persona         || (provider.rfc?.length === 13 ? 'fisica' : 'moral'),
+      legal_representative: provider.legal_representative || '',
+      phone:                provider.phone                || '',
+      email:                provider.email                || '',
+      street:               provider.street               || '',
+      exterior_number:      provider.exterior_number      || '',
+      interior_number:      provider.interior_number      || '',
+      neighborhood:         provider.neighborhood         || '',
+      city:                 provider.city                 || '',
+      state:                provider.state                || '',
+      postal_code:          provider.postal_code          || '',
+      bank:                 provider.bank                 || '',
+      bank_branch:          provider.bank_branch          || '',
+      account_number:       provider.account_number       || '',
+      clabe:                provider.clabe                || '',
+      credit_amount:        provider.credit_amount        || '',
+      credit_days:          provider.credit_days          || '',
+      observations:         provider.observations         || '',
+    });
+    setErrors({});
+    setIsEditing(false);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    updateMutation.mutate(formData);
+    mutation.mutate(form);
   };
 
-  const handleCancel = () => {
-    setFormData(buildForm(provider));
-    setCustomCity('');
-    setIsEditing(false);
-  };
+  const selectClass = "w-full px-3 py-2.5 text-sm border-2 border-gray-200 rounded-xl focus:outline-none focus:border-primary-500 bg-white";
 
-  const getCiudades           = () => CIUDADES_POR_ESTADO[formData.state] || ['Otra'];
-  const ciudadEsPersonalizada = () => {
-    const ciudades = getCiudades();
-    return formData.city && !ciudades.includes(formData.city);
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="p-5 border-2 rounded-xl bg-gradient-to-r from-primary-50 to-pink-50 border-primary-200">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="flex items-center gap-2 text-xl font-bold text-gray-900">
-              <Building2 className="w-6 h-6 text-primary-600" />
-              Información General
-            </h2>
-            <p className="mt-1 text-sm text-gray-600">Datos básicos de tu empresa</p>
-          </div>
-          {!isEditing && (
-            <Button variant="primary" leftIcon={<Edit2 className="w-4 h-4" />} onClick={() => setIsEditing(true)}>
-              Editar
+  // ── Modo lectura ──────────────────────────────────────────────────────────
+  if (!isEditing) {
+    const tipoPersona = provider.tipo_persona || (provider.rfc?.length === 13 ? 'fisica' : 'moral');
+    return (
+      <div className="space-y-6">
+        {canEdit && (
+          <div className="flex justify-end">
+            <Button variant="secondary" leftIcon={<Edit2 className="w-4 h-4"/>} onClick={() => setIsEditing(true)}>
+              Editar información
             </Button>
-          )}
+          </div>
+        )}
+
+        {/* Identificación */}
+        <div className="p-5 space-y-4 bg-white border-2 border-gray-100 rounded-xl">
+          <h3 className="flex items-center gap-2 text-sm font-bold tracking-wide text-gray-700 uppercase">
+            <Building2 className="w-4 h-4 text-primary-500"/>Identificación
+          </h3>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <InfoRow label="Razón Social"          value={provider.business_name} />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-xs font-semibold tracking-wide text-gray-500 uppercase">RFC</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm font-medium text-gray-900">{provider.rfc}</span>
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold border ${
+                  tipoPersona === 'fisica'
+                    ? 'bg-green-50 border-green-200 text-green-700'
+                    : 'bg-blue-50 border-blue-200 text-blue-700'
+                }`}>
+                  {tipoPersona === 'fisica' ? '👤 Persona Física' : '🏢 Persona Moral'}
+                </span>
+              </div>
+            </div>
+            <InfoRow label="Representante Legal" value={provider.legal_representative} />
+          </div>
+        </div>
+
+        {/* Contacto */}
+        <div className="p-5 space-y-4 bg-white border-2 border-gray-100 rounded-xl">
+          <h3 className="flex items-center gap-2 text-sm font-bold tracking-wide text-gray-700 uppercase">
+            <Phone className="w-4 h-4 text-primary-500"/>Contacto
+          </h3>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <InfoRow label="Teléfono" value={provider.phone} />
+            <InfoRow label="Correo"   value={provider.email} />
+          </div>
+        </div>
+
+        {/* Dirección */}
+        <div className="p-5 space-y-4 bg-white border-2 border-gray-100 rounded-xl">
+          <h3 className="flex items-center gap-2 text-sm font-bold tracking-wide text-gray-700 uppercase">
+            <MapPin className="w-4 h-4 text-primary-500"/>Dirección
+          </h3>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <InfoRow label="Calle"         value={provider.street} />
+            <InfoRow label="No. Exterior"  value={provider.exterior_number} />
+            <InfoRow label="No. Interior"  value={provider.interior_number} />
+            <InfoRow label="Colonia"       value={provider.neighborhood} />
+            <InfoRow label="Ciudad"        value={provider.city} />
+            <InfoRow label="Estado"        value={provider.state} />
+            <InfoRow label="Código Postal" value={provider.postal_code} />
+          </div>
+        </div>
+
+        {/* Datos bancarios */}
+        <div className="p-5 space-y-4 bg-white border-2 border-gray-100 rounded-xl">
+          <h3 className="flex items-center gap-2 text-sm font-bold tracking-wide text-gray-700 uppercase">
+            <CreditCard className="w-4 h-4 text-primary-500"/>Datos Bancarios
+          </h3>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <InfoRow label="Banco"          value={provider.bank} />
+            <InfoRow label="Sucursal"       value={provider.bank_branch} />
+            <InfoRow label="No. de Cuenta"  value={provider.account_number} mono />
+            <InfoRow label="CLABE"          value={provider.clabe} mono />
+          </div>
+        </div>
+
+        {/* Crédito */}
+        {(provider.credit_amount || provider.credit_days) && (
+          <div className="p-5 space-y-4 bg-white border-2 border-gray-100 rounded-xl">
+            <h3 className="text-sm font-bold tracking-wide text-gray-700 uppercase">Crédito</h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <InfoRow label="Monto de Crédito" value={provider.credit_amount ? `$${parseFloat(provider.credit_amount).toLocaleString('es-MX')}` : null} />
+              <InfoRow label="Días de Crédito"  value={provider.credit_days ? `${provider.credit_days} días` : null} />
+            </div>
+          </div>
+        )}
+
+        {provider.observations && (
+          <div className="p-5 bg-white border-2 border-gray-100 rounded-xl">
+            <h3 className="mb-2 text-sm font-bold tracking-wide text-gray-700 uppercase">Observaciones</h3>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{provider.observations}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Modo edición ──────────────────────────────────────────────────────────
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-gray-900">Editando información general</h3>
+        <div className="flex gap-2">
+          <Button type="submit" loading={mutation.isPending} leftIcon={<Save className="w-4 h-4"/>}>
+            Guardar
+          </Button>
+          <Button type="button" variant="ghost" leftIcon={<X className="w-4 h-4"/>} onClick={handleCancel} disabled={mutation.isPending}>
+            Cancelar
+          </Button>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Identificación */}
+      <div className="p-5 space-y-4 bg-white border-2 border-gray-100 rounded-xl">
+        <h3 className="flex items-center gap-2 text-sm font-bold tracking-wide text-gray-700 uppercase">
+          <Building2 className="w-4 h-4 text-primary-500"/>Identificación
+        </h3>
+        <Input label="Razón Social *" name="business_name" value={form.business_name}
+          onChange={handleChange} error={errors.business_name?.[0]} required />
 
-        {/* Datos de la Empresa */}
-        <Section icon={Building2} title="Datos de la Empresa">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Input label="Razón Social" name="business_name" value={formData.business_name} onChange={handleChange} disabled={!isEditing} required placeholder="Nombre de la empresa" />
-            <Input label="RFC" name="rfc" value={formData.rfc} onChange={handleChange} disabled={!isEditing} required placeholder="XAXX010101000" helperText="12 o 13 caracteres" />
-            <Input label="Representante Legal" name="legal_representative" value={formData.legal_representative} onChange={handleChange} disabled={!isEditing} placeholder="Nombre completo del representante" leftIcon={<User className="w-4 h-4 text-gray-400" />} />
-          </div>
-        </Section>
+        {/* RFC + tipo persona */}
+        <div>
+          <Input label="RFC *" name="rfc" value={form.rfc} onChange={handleChange}
+            error={errors.rfc?.[0]} maxLength={13} required
+            helperText="12 caracteres = Persona Moral · 13 caracteres = Persona Física"
+            className="font-mono uppercase" />
 
-        {/* Contacto */}
-        <Section icon={Phone} title="Información de Contacto">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Input label="Correo Electrónico" type="email" value={provider?.email || ''} disabled leftIcon={<Mail className="w-5 h-5 text-gray-400" />} helperText="El correo no se puede modificar" />
-            <Input label="Teléfono" type="tel" name="phone" value={formData.phone} onChange={handleChange} disabled={!isEditing} placeholder="33 1234 5678" leftIcon={<Phone className="w-5 h-5 text-gray-400" />} />
-          </div>
-        </Section>
-
-        {/* Dirección */}
-        <Section icon={MapPin} title="Dirección">
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="md:col-span-2">
-                <Input label="Calle" name="street" value={formData.street} onChange={handleChange} disabled={!isEditing} placeholder="Av. Principal" />
+          {form.rfc.length >= 12 && (
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold ${
+                form.tipo_persona === 'fisica'
+                  ? 'bg-green-50 border-green-200 text-green-700'
+                  : 'bg-blue-50 border-blue-200 text-blue-700'
+              }`}>
+                {form.tipo_persona === 'fisica' ? '👤 Persona Física' : '🏢 Persona Moral'}
+                <span className="ml-1 opacity-50">({form.rfc.length} chars)</span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Input label="No. Ext" name="exterior_number" value={formData.exterior_number} onChange={handleChange} disabled={!isEditing} placeholder="123" />
-                <Input label="No. Int" name="interior_number" value={formData.interior_number} onChange={handleChange} disabled={!isEditing} placeholder="A" />
-              </div>
+              <select
+                value={form.tipo_persona}
+                onChange={e => setForm(f => ({ ...f, tipo_persona: e.target.value }))}
+                className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-primary-400 text-gray-600">
+                <option value="moral">Persona Moral</option>
+                <option value="fisica">Persona Física</option>
+              </select>
             </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Input label="Colonia" name="neighborhood" value={formData.neighborhood} onChange={handleChange} disabled={!isEditing} placeholder="Centro" />
-              <Input label="Código Postal" name="postal_code" value={formData.postal_code} onChange={handleChange} disabled={!isEditing} placeholder="45000" maxLength={5} required helperText={isEditing ? 'Solo números, 5 dígitos' : ''} />
-            </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div>
-                <label className="block mb-2 text-sm font-semibold text-gray-700">Estado<span className="ml-1 text-red-500">*</span></label>
-                {isEditing ? (
-                  <select name="state" value={formData.state} onChange={handleChange} required className="w-full px-4 py-3 transition-all border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
-                    <option value="">Selecciona un estado</option>
-                    {ESTADOS_MEXICO.map(e => <option key={e} value={e}>{e}</option>)}
-                  </select>
-                ) : (
-                  <input type="text" value={formData.state} disabled className="w-full px-4 py-3 text-gray-500 border-2 border-gray-300 rounded-xl bg-gray-50" />
-                )}
-              </div>
-              <div>
-                <label className="block mb-2 text-sm font-semibold text-gray-700">Ciudad<span className="ml-1 text-red-500">*</span></label>
-                {isEditing ? (
-                  <div className="space-y-2">
-                    <select name="city" value={ciudadEsPersonalizada() ? 'Otra' : formData.city} onChange={handleChange} required={!ciudadEsPersonalizada()} className="w-full px-4 py-3 transition-all border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
-                      <option value="">Selecciona una ciudad</option>
-                      {getCiudades().map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    {(formData.city === '' && getCiudades().includes('Otra')) || ciudadEsPersonalizada() ? (
-                      <input type="text" value={ciudadEsPersonalizada() ? formData.city : customCity} onChange={handleCustomCityChange} placeholder="Escribe tu ciudad" required className="w-full px-4 py-3 transition-all border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
-                    ) : null}
-                  </div>
-                ) : (
-                  <input type="text" value={formData.city} disabled className="w-full px-4 py-3 text-gray-500 border-2 border-gray-300 rounded-xl bg-gray-50" />
-                )}
-              </div>
-              <Input label="País" name="country" value={formData.country} onChange={handleChange} disabled={!isEditing} />
-            </div>
-          </div>
-        </Section>
+          )}
 
-        {/* Información Bancaria */}
-        <Section icon={CreditCard} title="Información Bancaria">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Input label="Banco" name="bank" value={formData.bank} onChange={handleChange} disabled={!isEditing} placeholder="BBVA, Banamex, Santander..." leftIcon={<CreditCard className="w-4 h-4 text-gray-400" />} />
-            <Input label="Sucursal" name="bank_branch" value={formData.bank_branch} onChange={handleChange} disabled={!isEditing} placeholder="Nombre o número de sucursal" />
-            <Input label="Número de Cuenta" name="account_number" value={formData.account_number} onChange={handleChange} disabled={!isEditing} placeholder="Número de cuenta bancaria" />
-            <Input label="CLABE" name="clabe" value={formData.clabe} onChange={handleChange} disabled={!isEditing} placeholder="18 dígitos" helperText={isEditing ? 'Solo números, 18 dígitos' : ''} maxLength={18} />
-          </div>
-        </Section>
-
-        {/* ✅ Crédito — SOLO LECTURA para el proveedor, lo gestiona Compras */}
-        <Section icon={CreditCard} title="Información Crediticia">
-          <div className="flex items-start gap-3 p-3 mb-4 border rounded-xl bg-amber-50 border-amber-200">
-            <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-700">
-              La información crediticia es gestionada por el área de Compras de DASAVENA.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <label className="block mb-2 text-sm font-semibold text-gray-700">Monto de Crédito</label>
-              <div className="relative">
-                <span className="absolute text-sm font-medium text-gray-400 -translate-y-1/2 left-3 top-1/2">$</span>
-                <input
-                  type="text"
-                  value={provider?.credit_amount
-                    ? Number(provider.credit_amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })
-                    : '0.00'}
-                  disabled
-                  className="w-full py-3 pr-4 text-gray-500 border-2 border-gray-200 pl-7 rounded-xl bg-gray-50"
-                />
-              </div>
+          {form.tipo_persona === 'fisica' && form.rfc.length >= 12 && (
+            <div className="flex items-start gap-2 p-3 mt-2 border bg-amber-50 border-amber-200 rounded-xl">
+              <span className="flex-shrink-0 text-sm text-amber-500">⚠️</span>
+              <p className="text-xs text-amber-700">
+                Al ser Persona Física, algunos documentos como el <strong>Acta Constitutiva</strong>{' '}
+                pueden no aplicar según la configuración del tipo de proveedor.
+              </p>
             </div>
-            <div>
-              <label className="block mb-2 text-sm font-semibold text-gray-700">Días de Crédito</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={provider?.credit_days ? `${provider.credit_days} días` : 'No asignado'}
-                  disabled
-                  className="w-full px-4 py-3 text-gray-500 border-2 border-gray-200 rounded-xl bg-gray-50"
-                />
-              </div>
-            </div>
-          </div>
-        </Section>
+          )}
+        </div>
 
-        {!isEditing && (
-          <div className="p-4 border border-blue-200 rounded-xl bg-blue-50">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-blue-800">
-                <p className="mb-1 font-medium">Mantén tu información actualizada</p>
-                <p>Es importante que los datos de tu empresa estén siempre al día para una mejor comunicación.</p>
-              </div>
-            </div>
-          </div>
-        )}
+        <Input label="Representante Legal" name="legal_representative" value={form.legal_representative}
+          onChange={handleChange} error={errors.legal_representative?.[0]} />
+      </div>
 
-        {isEditing && (
-          <div className="flex justify-end gap-3 pt-6 border-t-2 border-gray-200">
-            <Button type="button" variant="ghost" leftIcon={<X className="w-4 h-4" />} onClick={handleCancel}>Cancelar</Button>
-            <Button type="submit" variant="primary" leftIcon={<Save className="w-4 h-4" />} loading={updateMutation.isPending}>Guardar Cambios</Button>
+      {/* Contacto */}
+      <div className="p-5 space-y-4 bg-white border-2 border-gray-100 rounded-xl">
+        <h3 className="flex items-center gap-2 text-sm font-bold tracking-wide text-gray-700 uppercase">
+          <Phone className="w-4 h-4 text-primary-500"/>Contacto
+        </h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Input label="Teléfono *"           name="phone" value={form.phone} onChange={handleChange} error={errors.phone?.[0]} required />
+          <Input label="Correo Electrónico *" name="email" type="email" value={form.email} onChange={handleChange} error={errors.email?.[0]} required />
+        </div>
+      </div>
+
+      {/* Dirección */}
+      <div className="p-5 space-y-4 bg-white border-2 border-gray-100 rounded-xl">
+        <h3 className="flex items-center gap-2 text-sm font-bold tracking-wide text-gray-700 uppercase">
+          <MapPin className="w-4 h-4 text-primary-500"/>Dirección
+        </h3>
+        <Input label="Calle *" name="street" value={form.street} onChange={handleChange} error={errors.street?.[0]} required />
+        <div className="grid grid-cols-2 gap-4">
+          <Input label="No. Exterior *" name="exterior_number" value={form.exterior_number} onChange={handleChange} error={errors.exterior_number?.[0]} required />
+          <Input label="No. Interior"   name="interior_number" value={form.interior_number} onChange={handleChange} error={errors.interior_number?.[0]} />
+        </div>
+        <Input label="Colonia *"       name="neighborhood" value={form.neighborhood} onChange={handleChange} error={errors.neighborhood?.[0]} required />
+        <Input label="Código Postal *" name="postal_code"  value={form.postal_code}  onChange={handleChange} error={errors.postal_code?.[0]}  required maxLength={10} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block mb-1.5 text-sm font-semibold text-gray-700">Estado *</label>
+            <select name="state" value={form.state} onChange={handleChange} className={selectClass}>
+              <option value="">Selecciona un estado...</option>
+              {MEXICAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            {errors.state?.[0] && <p className="mt-1 text-xs text-red-600">{errors.state[0]}</p>}
           </div>
-        )}
-      </form>
-    </div>
+          <Input label="Ciudad *" name="city" value={form.city} onChange={handleChange} error={errors.city?.[0]} required />
+        </div>
+      </div>
+
+      {/* Datos bancarios */}
+      <div className="p-5 space-y-4 bg-white border-2 border-gray-100 rounded-xl">
+        <h3 className="flex items-center gap-2 text-sm font-bold tracking-wide text-gray-700 uppercase">
+          <CreditCard className="w-4 h-4 text-primary-500"/>Datos Bancarios
+        </h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Input label="Banco"         name="bank"           value={form.bank}           onChange={handleChange} error={errors.bank?.[0]} />
+          <Input label="Sucursal"      name="bank_branch"    value={form.bank_branch}    onChange={handleChange} error={errors.bank_branch?.[0]} />
+          <Input label="No. de Cuenta" name="account_number" value={form.account_number} onChange={handleChange} error={errors.account_number?.[0]} />
+          <Input label="CLABE"         name="clabe"          value={form.clabe}          onChange={handleChange} error={errors.clabe?.[0]} maxLength={18} />
+        </div>
+      </div>
+
+      {/* Crédito */}
+      <div className="p-5 space-y-4 bg-white border-2 border-gray-100 rounded-xl">
+        <h3 className="text-sm font-bold tracking-wide text-gray-700 uppercase">Crédito</h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Input label="Monto de Crédito" name="credit_amount" type="number" value={form.credit_amount} onChange={handleChange} error={errors.credit_amount?.[0]} min={0} step="0.01" />
+          <Input label="Días de Crédito"  name="credit_days"   type="number" value={form.credit_days}   onChange={handleChange} error={errors.credit_days?.[0]}   min={0} />
+        </div>
+      </div>
+
+      {/* Observaciones */}
+      <div className="p-5 bg-white border-2 border-gray-100 rounded-xl">
+        <label className="block mb-2 text-sm font-bold tracking-wide text-gray-700 uppercase">Observaciones</label>
+        <textarea name="observations" value={form.observations} onChange={handleChange} rows={4}
+          className="w-full px-3 py-2.5 text-sm border-2 border-gray-200 rounded-xl focus:outline-none focus:border-primary-500 resize-none"
+          placeholder="Notas adicionales sobre el proveedor..."/>
+      </div>
+
+      <div className="flex gap-3 pt-2">
+        <Button type="submit" loading={mutation.isPending} leftIcon={<Save className="w-4 h-4"/>} className="flex-1">
+          Guardar cambios
+        </Button>
+        <Button type="button" variant="ghost" onClick={handleCancel} disabled={mutation.isPending}>
+          Cancelar
+        </Button>
+      </div>
+    </form>
   );
 };

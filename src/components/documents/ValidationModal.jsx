@@ -16,7 +16,8 @@ import {
   MessageSquare,
   Download,
   Eye,
-  History
+  History,
+  Pencil,
 } from 'lucide-react';
 
 export const ValidationModal = ({ isOpen, onClose, document }) => {
@@ -28,12 +29,21 @@ export const ValidationModal = ({ isOpen, onClose, document }) => {
   const [viewing, setViewing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
+  // ✅ Edición de fechas durante la validación
+  const [editingDates, setEditingDates] = useState(false);
+  const [issueDate, setIssueDate] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
+
   // Reset state cuando cambia el documento
   useEffect(() => {
     if (document) {
       setAction(null);
       setComments('');
       setError('');
+      setEditingDates(false);
+      // Normalizamos a YYYY-MM-DD para los inputs type="date"
+      setIssueDate(document.issue_date ? document.issue_date.slice(0, 10) : '');
+      setExpiryDate(document.expiry_date ? document.expiry_date.slice(0, 10) : '');
     }
   }, [document]);
 
@@ -62,9 +72,18 @@ export const ValidationModal = ({ isOpen, onClose, document }) => {
       return;
     }
 
+    if (expiryDate && issueDate && expiryDate < issueDate) {
+      setError('La fecha de vencimiento no puede ser anterior a la fecha de emisión');
+      return;
+    }
+
     const validationData = {
       status: action === 'approve' ? 'approved' : 'rejected',
       comments: comments.trim() || null,
+      // ✅ Se envían siempre — si no se tocaron, el backend detecta que no
+      // cambiaron y no genera nota de corrección.
+      issue_date: issueDate || null,
+      expiry_date: expiryDate || null,
     };
 
     mutation.mutate({ 
@@ -77,6 +96,7 @@ export const ValidationModal = ({ isOpen, onClose, document }) => {
     setAction(null);
     setComments('');
     setError('');
+    setEditingDates(false);
     onClose();
   };
 
@@ -180,6 +200,10 @@ export const ValidationModal = ({ isOpen, onClose, document }) => {
     return previewableExtensions.includes(extension);
   };
 
+  const datesWereChanged =
+    (document.issue_date ? document.issue_date.slice(0, 10) : '') !== issueDate ||
+    (document.expiry_date ? document.expiry_date.slice(0, 10) : '') !== expiryDate;
+
   return (
     <>
       <Modal
@@ -238,16 +262,47 @@ export const ValidationModal = ({ isOpen, onClose, document }) => {
 
             {/* Detalles en grid */}
             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
-              <InfoItem
-                icon={Calendar}
-                label="Fecha de Emisión"
-                value={formatDate(document.issue_date)}
-              />
-              <InfoItem
-                icon={Calendar}
-                label="Fecha de Vencimiento"
-                value={formatDate(document.expiry_date)}
-              />
+              {!editingDates ? (
+                <>
+                  <InfoItem
+                    icon={Calendar}
+                    label="Fecha de Emisión"
+                    value={formatDate(issueDate)}
+                  />
+                  <InfoItem
+                    icon={Calendar}
+                    label="Fecha de Vencimiento"
+                    value={formatDate(expiryDate)}
+                  />
+                </>
+              ) : (
+                <>
+                  <div className="space-y-1">
+                    <label className="flex items-center text-xs font-semibold tracking-wide text-gray-600 uppercase">
+                      <Calendar className="w-3.5 h-3.5 mr-1.5 text-primary-500" />
+                      Fecha de Emisión
+                    </label>
+                    <input
+                      type="date"
+                      value={issueDate}
+                      onChange={(e) => setIssueDate(e.target.value)}
+                      className="w-full px-2 py-1.5 text-sm border-2 border-gray-200 rounded-lg focus:outline-none focus:border-primary-400"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="flex items-center text-xs font-semibold tracking-wide text-gray-600 uppercase">
+                      <Calendar className="w-3.5 h-3.5 mr-1.5 text-primary-500" />
+                      Fecha de Vencimiento
+                    </label>
+                    <input
+                      type="date"
+                      value={expiryDate}
+                      onChange={(e) => setExpiryDate(e.target.value)}
+                      className="w-full px-2 py-1.5 text-sm border-2 border-gray-200 rounded-lg focus:outline-none focus:border-primary-400"
+                    />
+                  </div>
+                </>
+              )}
               <InfoItem
                 icon={Calendar}
                 label="Fecha de Carga"
@@ -259,6 +314,33 @@ export const ValidationModal = ({ isOpen, onClose, document }) => {
                 value={document.uploaded_by?.name || 'N/A'}
               />
             </div>
+
+            {/* ✅ Toggle de edición de fechas */}
+            <button
+              type="button"
+              onClick={() => setEditingDates((v) => !v)}
+              className="flex items-center gap-1.5 mt-3 text-xs font-semibold text-primary-600 hover:text-primary-700"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              {editingDates ? 'Cancelar edición de fechas' : 'Las fechas no coinciden con el documento — corregir'}
+            </button>
+
+            {editingDates && (
+              <div className="flex items-start gap-2 p-3 mt-2 border border-amber-200 rounded-xl bg-amber-50">
+                <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700">
+                  Abre el documento con "Ver Documento" y ajusta las fechas para que coincidan con lo que realmente
+                  indica el archivo. El cambio se guardará al aprobar o rechazar, y quedará registrado en el historial.
+                </p>
+              </div>
+            )}
+
+            {datesWereChanged && (
+              <div className="flex items-center gap-2 px-3 py-2 mt-2 text-xs font-medium border rounded-lg text-amber-700 bg-amber-50 border-amber-200">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                Se guardará una fecha distinta a la calculada originalmente por el sistema.
+              </div>
+            )}
 
             {/* Notas del proveedor */}
             {document.notes && (

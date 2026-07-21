@@ -2,8 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, useNavigate, NavLink, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { authService } from '../api/authService';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { documentService } from '../api/documentService';
+import { notificationService } from '../api/notificationService';
 import { PWAInstallButton } from '../components/common/PWAInstallButton';
 import { CalendarDays } from 'lucide-react';
 import {
@@ -11,12 +12,23 @@ import {
   Menu, X, Bell, BarChart3, Send, Shield, FlaskConical,
   Settings, FileCog, Package, ChevronDown, ChevronRight,
   PanelLeftClose, PanelLeftOpen, Clock, AlertTriangle, Tag,
+  RefreshCw, UserX, CheckCircle, Ban, Activity,FileSpreadsheet,
 } from 'lucide-react';
+
+// ✅ Configuración visual por tipo de evento (icono + color)
+const EVENT_CONFIG = {
+  appointment_rescheduled:     { icon: RefreshCw,   bg: 'bg-purple-100', color: 'text-purple-600' },
+  appointment_no_show:         { icon: UserX,       bg: 'bg-orange-100', color: 'text-orange-600' },
+  appointment_entry_confirmed: { icon: CheckCircle, bg: 'bg-green-100',  color: 'text-green-600'  },
+  calendar_block_created:      { icon: Ban,         bg: 'bg-red-100',    color: 'text-red-600'    },
+};
+const getEventConfig = (type) => EVENT_CONFIG[type] || { icon: Activity, bg: 'bg-gray-100', color: 'text-gray-500' };
 
 export const DashboardLayout = () => {
   const navigate  = useNavigate();
   const location  = useLocation();
   const { user, logout } = useAuthStore();
+  const queryClient = useQueryClient();
   const [sidebarOpen,       setSidebarOpen]       = useState(false);
   const [sidebarCollapsed,  setSidebarCollapsed]  = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -49,7 +61,7 @@ export const DashboardLayout = () => {
   const userRole = getUserRole();
   const canValidate = ['super_admin', 'admin', 'calidad'].includes(userRole?.toLowerCase());
 
-  // ── Conteo de pendientes (badge) ──────────────────────────────────────────
+  // ── Conteo de documentos pendientes (badge) ───────────────────────────────
   const { data: pendingCount = 0 } = useQuery({
     queryKey: ['pending-badge'],
     queryFn: () => documentService.getPending({}),
@@ -66,11 +78,37 @@ export const DashboardLayout = () => {
     enabled: canValidate && showNotifications,
   });
 
-  // Intentar extraer el array de documentos de diferentes estructuras posibles
   const pendingDocs = pendingDocsRaw?.documents?.data
     || pendingDocsRaw?.documents
     || pendingDocsRaw?.data
     || [];
+
+  // ✅ NUEVO: eventos de citas/bloqueos — para todos los roles, con polling cada 20s
+  const { data: eventsData } = useQuery({
+    queryKey: ['notif-events'],
+    queryFn: notificationService.getAll,
+    refetchInterval: 20 * 1000,
+  });
+  const events        = eventsData?.notifications || [];
+  const eventsUnread   = eventsData?.unread_count  || 0;
+
+  const markReadMutation = useMutation({
+    mutationFn: notificationService.markRead,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notif-events'] }),
+  });
+  const markAllReadMutation = useMutation({
+    mutationFn: notificationService.markAllRead,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notif-events'] }),
+  });
+
+  const handleEventClick = (ev) => {
+    if (!ev.read) markReadMutation.mutate(ev.id);
+    if (ev.link) navigate(ev.link);
+    setShowNotifications(false);
+  };
+
+  // ✅ Badge combinado: documentos pendientes (si aplica el rol) + eventos sin leer
+  const totalBadge = (canValidate ? pendingCount : 0) + eventsUnread;
 
   const navigation = [
     { name: 'Dashboard',              href: '/dashboard',            icon: LayoutDashboard, roles: ['super_admin','admin','calidad','compras'] },
@@ -83,6 +121,8 @@ export const DashboardLayout = () => {
     { name: 'Calendario de Citas',    href: '/appointments',         icon: CalendarDays,    roles: ['super_admin','admin','compras'] },
     { name: 'Control de Acceso',      href: '/security/calendar',    icon: Shield,          roles: ['super_admin','admin','seguridad'] },
     { name: 'Recepción de Productos', href: '/food-engineer',        icon: FlaskConical,    roles: ['super_admin','admin','ingeniero_alimentos'] },
+    { name: 'Reportes',               href: '/reports',              icon: FileSpreadsheet, roles: ['super_admin','admin','calidad','compras','ingeniero_alimentos'] },
+
     { name: 'User Management',        href: '/admin/users',          icon: Users,           roles: ['super_admin','admin'] },
   ];
 
@@ -116,28 +156,28 @@ export const DashboardLayout = () => {
   };
   const getRoleColor = () => roleColors[userRole?.toLowerCase()] || 'bg-gradient-to-br from-gray-500 to-gray-600';
 
-  // ── Panel de notificaciones ───────────────────────────────────────────────
+  // ── Panel de notificaciones (fusionado: docs pendientes + eventos) ────────
   const NotificationsPanel = () => (
     <div className="absolute right-0 z-50 overflow-hidden bg-white border border-gray-100 shadow-2xl top-12 w-80 rounded-2xl">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
         <p className="text-sm font-bold text-gray-900">Notificaciones</p>
-        {pendingCount > 0 && (
-          <span className="text-xs font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
-            {pendingCount} pendiente{pendingCount !== 1 ? 's' : ''}
-          </span>
+        {eventsUnread > 0 && (
+          <button
+            onClick={() => markAllReadMutation.mutate()}
+            className="text-xs font-semibold text-primary-600 hover:underline">
+            Marcar todo leído
+          </button>
         )}
       </div>
-      <div className="overflow-y-auto max-h-80">
-        {pendingCount === 0 ? (
-          <div className="py-8 text-center text-gray-400">
-            <Bell className="w-8 h-8 mx-auto mb-2 opacity-30"/>
-            <p className="text-sm">Sin documentos pendientes</p>
-          </div>
-        ) : pendingDocs.length > 0 ? (
-          <>
-            {pendingDocs.map(doc => (
+
+      <div className="overflow-y-auto max-h-96">
+        {/* ── Sección: documentos pendientes (solo calidad/admin) ── */}
+        {canValidate && pendingCount > 0 && (
+          <div className="border-b border-gray-100">
+            <p className="px-4 pt-3 pb-1 text-xs font-bold tracking-wide text-gray-400 uppercase">Documentos pendientes</p>
+            {pendingDocs.length > 0 ? pendingDocs.map(doc => (
               <div key={doc.id}
-                className="flex items-start gap-3 px-4 py-3 transition-colors border-b cursor-pointer border-gray-50 hover:bg-gray-50"
+                className="flex items-start gap-3 px-4 py-3 transition-colors border-b cursor-pointer border-gray-50 hover:bg-gray-50 last:border-b-0"
                 onClick={() => { navigate('/documents/validation'); setShowNotifications(false); }}>
                 <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-amber-100 mt-0.5">
                   <FileText className="w-4 h-4 text-amber-600"/>
@@ -154,25 +194,51 @@ export const DashboardLayout = () => {
                   </p>
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="px-4 pb-3 text-xs text-gray-500">
+                Hay {pendingCount} documento{pendingCount !== 1 ? 's' : ''} pendiente{pendingCount !== 1 ? 's' : ''}.
+              </div>
+            )}
             {pendingCount > 5 && (
               <button onClick={() => { navigate('/documents/validation'); setShowNotifications(false); }}
-                className="w-full px-4 py-3 text-xs font-semibold text-center transition-colors border-t border-gray-100 text-primary-600 hover:bg-primary-50">
+                className="w-full px-4 py-2.5 text-xs font-semibold text-center transition-colors border-t border-gray-100 text-primary-600 hover:bg-primary-50">
                 Ver todos los {pendingCount} documentos pendientes →
               </button>
             )}
-          </>
-        ) : (
-          <div className="px-4 py-6 text-center">
-            <p className="text-sm text-gray-500">
-              Hay {pendingCount} documento{pendingCount !== 1 ? 's' : ''} pendiente{pendingCount !== 1 ? 's' : ''}.
-            </p>
-            <button onClick={() => { navigate('/documents/validation'); setShowNotifications(false); }}
-              className="mt-3 text-xs font-semibold text-primary-600 hover:underline">
-              Ir a validar documentos →
-            </button>
           </div>
         )}
+
+        {/* ── Sección: actividad reciente (citas, bloqueos, etc.) ── */}
+        <div>
+          <p className="px-4 pt-3 pb-1 text-xs font-bold tracking-wide text-gray-400 uppercase">Actividad reciente</p>
+          {events.length === 0 ? (
+            <div className="py-8 text-center text-gray-400">
+              <Bell className="w-8 h-8 mx-auto mb-2 opacity-30"/>
+              <p className="text-sm">Sin actividad reciente</p>
+            </div>
+          ) : (
+            events.map(ev => {
+              const cfg = getEventConfig(ev.type);
+              const Icon = cfg.icon;
+              return (
+                <div key={ev.id} onClick={() => handleEventClick(ev)}
+                  className={`flex items-start gap-3 px-4 py-3 transition-colors border-b cursor-pointer border-gray-50 hover:bg-gray-50 last:border-b-0 ${!ev.read ? 'bg-primary-50/30' : ''}`}>
+                  <div className={`flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg ${cfg.bg} mt-0.5`}>
+                    <Icon className={`w-4 h-4 ${cfg.color}`}/>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{ev.title}</p>
+                      {!ev.read && <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-primary-500"/>}
+                    </div>
+                    <p className="text-xs text-gray-500 line-clamp-2">{ev.message}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{ev.created_at}</p>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );
@@ -184,9 +250,9 @@ export const DashboardLayout = () => {
         className="relative p-2 text-gray-500 transition-colors rounded-xl hover:text-primary hover:bg-primary-50"
         title="Notificaciones">
         <Bell className="w-5 h-5"/>
-        {pendingCount > 0 && (
+        {totalBadge > 0 && (
           <span className="absolute top-0.5 right-0.5 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold bg-red-500 text-white leading-none">
-            {pendingCount > 99 ? '99+' : pendingCount}
+            {totalBadge > 99 ? '99+' : totalBadge}
           </span>
         )}
       </button>

@@ -34,6 +34,7 @@ import { CatalogPage } from './pages/settings/CatalogPage';
 import { DocumentManagementPage } from './pages/settings/DocumentManagementPage'; 
 import { ProviderHelpPage } from './pages/providers/ProviderHelpPage';
 import { ProviderTypeManagementPage } from './pages/settings/ProviderTypeManagementPage';
+import { ReportsPage } from './pages/reports/ReportsPage';
 import './styles/custom-animations.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -104,6 +105,11 @@ function App() {
                 <FoodEngineerPage />
               </RoleProtectedRoute>
             } />
+            <Route path="reports" element={
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','compras','ingeniero_alimentos']}>
+                <ReportsPage />
+              </RoleProtectedRoute>
+            } />
 
             <Route path="providers" element={
               <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','compras','ingeniero_alimentos']}>
@@ -140,7 +146,7 @@ function App() {
                 <CatalogPage />
               </RoleProtectedRoute>
             } />
-            {/* ✅ NUEVO — Gestión de tipos de documentos */}
+            {/*  NUEVO — Gestión de tipos de documentos */}
             <Route path="settings/documents" element={
               <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad']}>
                 <DocumentManagementPage />

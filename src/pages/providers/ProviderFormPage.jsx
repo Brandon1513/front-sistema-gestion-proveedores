@@ -121,6 +121,7 @@ export const ProviderFormPage = () => {
     provider_type_id:     '',
     business_name:        '',
     rfc:                  '',
+    tipo_persona:         '',
     legal_representative: '',
     street:               '',
     exterior_number:      '',
@@ -184,6 +185,7 @@ export const ProviderFormPage = () => {
         provider_type_id:     p.provider_type_id     || '',
         business_name:        p.business_name        || '',
         rfc:                  p.rfc                  || '',
+        tipo_persona: p.tipo_persona || (p.rfc?.length === 13 ? 'fisica' : 'moral'),
         legal_representative: p.legal_representative || '',
         street:               p.street               || '',
         exterior_number:      p.exterior_number      || '',
@@ -244,6 +246,16 @@ export const ProviderFormPage = () => {
       setCustomCity('');
       return;
     }
+    // ✅ Auto-detectar tipo_persona al escribir RFC
+    if (name === 'rfc') {
+      const rfcUpper = value.toUpperCase();
+      const tipoPersona = rfcUpper.length === 13 ? 'fisica' : 'moral';
+      setFormData(prev => ({ ...prev, rfc: rfcUpper, tipo_persona: tipoPersona }));
+      // ✅ Limpiar error del RFC también
+      if (errors.rfc) setErrors(prev => ({ ...prev, rfc: null }));
+      return;
+    }
+
     setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
   };
@@ -322,7 +334,54 @@ export const ProviderFormPage = () => {
               options={[{ value:'', label:'Selecciona un tipo...' }, ...(typesData?.provider_types?.map(t => ({ value:t.id, label:t.name })) || [])]}
               error={errors.provider_type_id?.[0]} required />
             <Input label="Razón Social *"      name="business_name"        value={formData.business_name}        onChange={handleChange} error={errors.business_name?.[0]}        required />
-            <Input label="RFC *"               name="rfc"                  value={formData.rfc}                  onChange={handleChange} error={errors.rfc?.[0]}                  maxLength={13} required helperText="12 o 13 caracteres" />
+            <div>
+            <Input
+              label="RFC *"
+              name="rfc"
+              value={formData.rfc}
+              onChange={handleChange}
+              error={errors.rfc?.[0]}
+              maxLength={13}
+              required
+              helperText="12 caracteres = Persona Moral · 13 caracteres = Persona Física"
+              className="font-mono uppercase"
+            />
+
+            {/* Badge de detección + selector manual */}
+            {formData.rfc.length >= 12 && (
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold ${
+                  formData.tipo_persona === 'fisica'
+                    ? 'bg-green-50 border-green-200 text-green-700'
+                    : 'bg-blue-50 border-blue-200 text-blue-700'
+                }`}>
+                  {formData.tipo_persona === 'fisica' ? '👤 Persona Física' : '🏢 Persona Moral'}
+                  <span className="ml-1 opacity-50">({formData.rfc.length} chars)</span>
+                </div>
+
+                {/* Selector manual por si la detección falla */}
+                <select
+                  value={formData.tipo_persona}
+                  onChange={e => setFormData(f => ({ ...f, tipo_persona: e.target.value }))}
+                  className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-primary-400 text-gray-600"
+                >
+                  <option value="moral">Persona Moral</option>
+                  <option value="fisica">Persona Física</option>
+                </select>
+              </div>
+            )}
+
+            {/* Aviso persona física */}
+            {formData.tipo_persona === 'fisica' && formData.rfc.length >= 12 && (
+              <div className="flex items-start gap-2 p-3 mt-2 border bg-amber-50 border-amber-200 rounded-xl">
+                <span className="flex-shrink-0 text-sm text-amber-500">⚠️</span>
+                <p className="text-xs text-amber-700">
+                  Al ser Persona Física, algunos documentos como el <strong>Acta Constitutiva</strong>{' '}
+                  pueden no aplicar según la configuración del tipo de proveedor.
+                </p>
+              </div>
+            )}
+          </div>
             <Input label="Representante Legal" name="legal_representative" value={formData.legal_representative} onChange={handleChange} error={errors.legal_representative?.[0]} />
           </div>
         </Card>
