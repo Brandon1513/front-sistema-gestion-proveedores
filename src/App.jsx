@@ -35,6 +35,8 @@ import { DocumentManagementPage } from './pages/settings/DocumentManagementPage'
 import { ProviderHelpPage } from './pages/providers/ProviderHelpPage';
 import { ProviderTypeManagementPage } from './pages/settings/ProviderTypeManagementPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
+import { ProviderRegisterSuccessPage } from './pages/providers/ProviderRegisterSuccessPage';
+
 import './styles/custom-animations.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -64,6 +66,9 @@ function App() {
           <Route path="/login"           element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
           <Route path="/reset-password"  element={<ResetPasswordPage />} />
+          {/* ✅ Ruta estática de éxito — debe ir ANTES de /register/:token para no ser
+              capturada como si "success" fuera un token de invitación */}
+          <Route path="/register/success" element={<ProviderRegisterSuccessPage />} />
           <Route path="/register/:token" element={<ProviderRegisterPage />} />
 
           {/* ── DashboardLayout ── */}
