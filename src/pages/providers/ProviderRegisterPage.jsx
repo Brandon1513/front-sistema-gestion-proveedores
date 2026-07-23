@@ -51,7 +51,7 @@ export const ProviderRegisterPage = () => {
   // ── Cargar invitación ─────────────────────────────────────────────────────
   const { data: invitationData, isLoading: loadingInvitation, error: invitationError } = useQuery({
     queryKey: ['invitation', token],
-    queryFn:  () => api.get(`/invitations/${token}`).then(r => r.data),
+    queryFn: () => api.get(`/invitations/verify/${token}`).then(r => r.data),
     enabled:  !!token,
     retry: false,
   });
@@ -82,7 +82,7 @@ export const ProviderRegisterPage = () => {
 
   // ── Mutación de registro ──────────────────────────────────────────────────
   const mutation = useMutation({
-    mutationFn: (data) => api.post(`/invitations/${token}/register`, data).then(r => r.data),
+    mutationFn: (data) => api.post('/register-provider', data).then(r => r.data),
     onSuccess: () => navigate('/register/success'),
     onError: (err) => {
       const apiErrors = err.response?.data?.errors || {};
@@ -100,6 +100,8 @@ export const ProviderRegisterPage = () => {
     // Asegurar tipo_persona antes de enviar
     const dataToSend = {
       ...formData,
+      token,
+      name: formData.legal_representative || formData.business_name,
       tipo_persona: formData.tipo_persona || (formData.rfc.length === 13 ? 'fisica' : 'moral'),
     };
     mutation.mutate(dataToSend);
