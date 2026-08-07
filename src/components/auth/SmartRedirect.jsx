@@ -1,6 +1,3 @@
-// ================================================================
-// ARCHIVO NUEVO: src/components/auth/SmartRedirect.jsx
-// ================================================================
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
@@ -25,5 +22,6 @@ export const SmartRedirect = () => {
   if (role === 'proveedor')           return <Navigate to="/provider/dashboard" replace />;
   if (role === 'seguridad')           return <Navigate to="/security/calendar" replace />;
   if (role === 'ingeniero_alimentos') return <Navigate to="/food-engineer" replace />;
+  if (role === 'emp_solicitante')     return <Navigate to="/my-requests" replace />; {/* ✅ NUEVO */}
   return <Navigate to="/dashboard" replace />;
 };

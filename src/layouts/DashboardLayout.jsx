@@ -12,10 +12,9 @@ import {
   Menu, X, Bell, BarChart3, Send, Shield, FlaskConical,
   Settings, FileCog, Package, ChevronDown, ChevronRight,
   PanelLeftClose, PanelLeftOpen, Clock, AlertTriangle, Tag,
-  RefreshCw, UserX, CheckCircle, Ban, Activity,FileSpreadsheet,
+  RefreshCw, UserX, CheckCircle, Ban, Activity, FileSpreadsheet, Inbox
 } from 'lucide-react';
 
-// ✅ Configuración visual por tipo de evento (icono + color)
 const EVENT_CONFIG = {
   appointment_rescheduled:     { icon: RefreshCw,   bg: 'bg-purple-100', color: 'text-purple-600' },
   appointment_no_show:         { icon: UserX,       bg: 'bg-orange-100', color: 'text-orange-600' },
@@ -36,6 +35,9 @@ export const DashboardLayout = () => {
 
   const isSettingsActive = location.pathname.startsWith('/settings');
   const [settingsOpen, setSettingsOpen] = useState(isSettingsActive);
+
+  const isProviderRequestsActive = ['/request-provider', '/my-requests', '/provider-requests'].includes(location.pathname);
+  const [providerRequestsOpen, setProviderRequestsOpen] = useState(isProviderRequestsActive);
 
   useEffect(() => {
     const handler = (e) => {
@@ -61,7 +63,6 @@ export const DashboardLayout = () => {
   const userRole = getUserRole();
   const canValidate = ['super_admin', 'admin', 'calidad'].includes(userRole?.toLowerCase());
 
-  // ── Conteo de documentos pendientes (badge) ───────────────────────────────
   const { data: pendingCount = 0 } = useQuery({
     queryKey: ['pending-badge'],
     queryFn: () => documentService.getPending({}),
@@ -70,7 +71,6 @@ export const DashboardLayout = () => {
     select: (data) => data?.stats?.total_pending || 0,
   });
 
-  // ── Documentos pendientes detallados para el panel ────────────────────────
   const { data: pendingDocsRaw } = useQuery({
     queryKey: ['notif-pending-docs'],
     queryFn: () => documentService.getPending({ per_page: 5 }),
@@ -83,7 +83,6 @@ export const DashboardLayout = () => {
     || pendingDocsRaw?.data
     || [];
 
-  // ✅ NUEVO: eventos de citas/bloqueos — para todos los roles, con polling cada 20s
   const { data: eventsData } = useQuery({
     queryKey: ['notif-events'],
     queryFn: notificationService.getAll,
@@ -107,7 +106,6 @@ export const DashboardLayout = () => {
     setShowNotifications(false);
   };
 
-  // ✅ Badge combinado: documentos pendientes (si aplica el rol) + eventos sin leer
   const totalBadge = (canValidate ? pendingCount : 0) + eventsUnread;
 
   const navigation = [
@@ -122,7 +120,6 @@ export const DashboardLayout = () => {
     { name: 'Control de Acceso',      href: '/security/calendar',    icon: Shield,          roles: ['super_admin','admin','seguridad'] },
     { name: 'Recepción de Productos', href: '/food-engineer',        icon: FlaskConical,    roles: ['super_admin','admin','ingeniero_alimentos'] },
     { name: 'Reportes',               href: '/reports',              icon: FileSpreadsheet, roles: ['super_admin','admin','calidad','compras','ingeniero_alimentos'] },
-
     { name: 'User Management',        href: '/admin/users',          icon: Users,           roles: ['super_admin','admin'] },
   ];
 
@@ -132,15 +129,26 @@ export const DashboardLayout = () => {
     { name: 'Tipos de Proveedor',    href: '/settings/provider-types',  icon: Tag,      roles: ['super_admin','admin', 'calidad'] },
   ];
 
+  const providerRequestsChildren = [
+    { name: 'Solicitar Proveedor', href: '/request-provider', icon: Send,
+      roles: ['emp_solicitante','super_admin','admin','compras'] },
+    { name: 'Mis Solicitudes',     href: '/my-requests',       icon: Send,
+      roles: ['emp_solicitante','super_admin','admin','compras'] },
+    { name: 'Solicitudes de Alta', href: '/provider-requests', icon: Inbox,
+      roles: ['super_admin','admin','compras'] },
+  ];
+
   const hasAccess = (itemRoles) => {
     if (!itemRoles || itemRoles.length === 0) return true;
     if (!userRole) return false;
     return itemRoles.map(r => r.toLowerCase()).includes(userRole.toLowerCase());
   };
 
-  const visibleNavigation    = navigation.filter(item => hasAccess(item.roles));
-  const visibleSettingsItems = settingsChildren.filter(item => hasAccess(item.roles));
-  const showSettings         = visibleSettingsItems.length > 0;
+  const visibleNavigation            = navigation.filter(item => hasAccess(item.roles));
+  const visibleSettingsItems         = settingsChildren.filter(item => hasAccess(item.roles));
+  const showSettings                 = visibleSettingsItems.length > 0;
+  const visibleProviderRequestsItems = providerRequestsChildren.filter(item => hasAccess(item.roles));
+  const showProviderRequests         = visibleProviderRequestsItems.length > 0;
 
   const getInitials = (name) => {
     if (!name) return 'U';
@@ -156,7 +164,6 @@ export const DashboardLayout = () => {
   };
   const getRoleColor = () => roleColors[userRole?.toLowerCase()] || 'bg-gradient-to-br from-gray-500 to-gray-600';
 
-  // ── Panel de notificaciones (fusionado: docs pendientes + eventos) ────────
   const NotificationsPanel = () => (
     <div className="absolute right-0 z-50 overflow-hidden bg-white border border-gray-100 shadow-2xl top-12 w-80 rounded-2xl">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
@@ -171,7 +178,6 @@ export const DashboardLayout = () => {
       </div>
 
       <div className="overflow-y-auto max-h-96">
-        {/* ── Sección: documentos pendientes (solo calidad/admin) ── */}
         {canValidate && pendingCount > 0 && (
           <div className="border-b border-gray-100">
             <p className="px-4 pt-3 pb-1 text-xs font-bold tracking-wide text-gray-400 uppercase">Documentos pendientes</p>
@@ -208,7 +214,6 @@ export const DashboardLayout = () => {
           </div>
         )}
 
-        {/* ── Sección: actividad reciente (citas, bloqueos, etc.) ── */}
         <div>
           <p className="px-4 pt-3 pb-1 text-xs font-bold tracking-wide text-gray-400 uppercase">Actividad reciente</p>
           {events.length === 0 ? (
@@ -243,7 +248,6 @@ export const DashboardLayout = () => {
     </div>
   );
 
-  // ── Botón de campana (reutilizable) ───────────────────────────────────────
   const BellButton = () => (
     <div className="relative" ref={notifRef}>
       <button onClick={() => setShowNotifications(v => !v)}
@@ -260,7 +264,6 @@ export const DashboardLayout = () => {
     </div>
   );
 
-  // ── Sidebar content ───────────────────────────────────────────────────────
   const SidebarContent = ({ onLinkClick, collapsed = false }) => (
     <>
       <nav className="flex-1 px-2 py-6 space-y-1 overflow-y-auto">
@@ -289,7 +292,56 @@ export const DashboardLayout = () => {
           </NavLink>
         ))}
 
-        {/* Configuración colapsable */}
+        {showProviderRequests && !collapsed && (
+          <div>
+            <button type="button" onClick={() => setProviderRequestsOpen(o => !o)}
+              className={`w-full group flex items-center justify-between px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
+                isProviderRequestsActive
+                  ? 'bg-primary-50 text-primary-700'
+                  : 'text-gray-700 hover:bg-primary-50 hover:text-primary'
+              }`}>
+              <span className="flex items-center gap-3">
+                <Inbox className="w-5 h-5 transition-transform group-hover:scale-110"/>
+                Altas de Proveedor
+              </span>
+              {providerRequestsOpen
+                ? <ChevronDown className="w-4 h-4 text-gray-400"/>
+                : <ChevronRight className="w-4 h-4 text-gray-400"/>}
+            </button>
+            {providerRequestsOpen && (
+              <div className="pl-4 mt-1 ml-3 space-y-1 border-l-2 border-primary-100">
+                {visibleProviderRequestsItems.map(item => (
+                  <NavLink key={item.name} to={item.href} onClick={onLinkClick}
+                    className={({ isActive }) =>
+                      `group flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ${
+                        isActive
+                          ? 'bg-gradient-primary text-white shadow-primary'
+                          : 'text-gray-600 hover:bg-primary-50 hover:text-primary-700'
+                      }`
+                    }>
+                    <item.icon className="flex-shrink-0 w-4 h-4"/>
+                    {item.name}
+                  </NavLink>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {showProviderRequests && collapsed && (
+          <NavLink to={visibleProviderRequestsItems[0]?.href || '/my-requests'}
+            title="Altas de Proveedor"
+            className={({ isActive }) =>
+              `group flex items-center justify-center w-10 h-10 mx-auto rounded-xl transition-all duration-200 ${
+                isProviderRequestsActive
+                  ? 'bg-gradient-primary text-white'
+                  : 'text-gray-700 hover:bg-primary-50 hover:text-primary'
+              }`
+            }>
+            <Inbox className="w-5 h-5"/>
+          </NavLink>
+        )}
+
         {showSettings && !collapsed && (
           <div>
             <button type="button" onClick={() => setSettingsOpen(o => !o)}
@@ -326,7 +378,6 @@ export const DashboardLayout = () => {
           </div>
         )}
 
-        {/* Settings ícono cuando está colapsado */}
         {showSettings && collapsed && (
           <NavLink to={visibleSettingsItems[0]?.href || '/settings'}
             title="Configuración"
@@ -342,7 +393,6 @@ export const DashboardLayout = () => {
         )}
       </nav>
 
-      {/* Footer */}
       {!collapsed ? (
         <div className="p-4 border-t border-gray-200 bg-gradient-to-br from-gray-50 to-white">
           <div onClick={() => { navigate('/profile'); onLinkClick?.(); }}
@@ -382,7 +432,6 @@ export const DashboardLayout = () => {
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
-      {/* ── Sidebar móvil ── */}
       <div className={`fixed inset-0 z-40 lg:hidden ${sidebarOpen ? '' : 'pointer-events-none'}`}>
         <div className={`fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity duration-300 ${sidebarOpen ? 'opacity-100' : 'opacity-0'}`}
           onClick={() => setSidebarOpen(false)}/>
@@ -403,10 +452,8 @@ export const DashboardLayout = () => {
         </div>
       </div>
 
-      {/* ── Sidebar desktop ── */}
       <div className={`hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col transition-all duration-300 ${sidebarCollapsed ? 'lg:w-16' : 'lg:w-72'}`}>
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-white shadow-xl">
-          {/* Header con botón colapsar */}
           <div className={`flex items-center h-20 shadow-lg bg-gradient-primary transition-all duration-300 ${sidebarCollapsed ? 'justify-center px-0' : 'px-6'}`}>
             {!sidebarCollapsed && (
               <>
@@ -427,9 +474,7 @@ export const DashboardLayout = () => {
         </div>
       </div>
 
-      {/* ── Contenido principal ── */}
       <div className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-72'}`}>
-        {/* Header móvil */}
         <div className="sticky top-0 z-10 flex h-16 border-b border-gray-200 shadow-sm bg-white/80 backdrop-blur-md lg:hidden">
           <button onClick={() => setSidebarOpen(true)} className="px-4 text-gray-700 transition-colors hover:text-primary focus:outline-none">
             <Menu className="w-6 h-6"/>
@@ -443,16 +488,8 @@ export const DashboardLayout = () => {
           </div>
         </div>
 
-        {/*  Header desktop con campana y usuario */}
         <div className="sticky top-0 z-10 items-center justify-end hidden gap-3 px-8 border-b border-gray-100 shadow-sm lg:flex h-14 bg-white/90 backdrop-blur-md">
           <BellButton/>
-           {/* Usuario en navbar
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-200">
-            <div className={`w-6 h-6 rounded-full ${getRoleColor()} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
-              {getInitials(user?.name)}
-            </div>
-            <span className="text-sm font-medium text-gray-700 truncate max-w-[160px]">{user?.name}</span>
-          </div> */}
         </div>
 
         <main className="p-4 lg:p-8">

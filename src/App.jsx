@@ -35,6 +35,11 @@ import { DocumentManagementPage } from './pages/settings/DocumentManagementPage'
 import { ProviderHelpPage } from './pages/providers/ProviderHelpPage';
 import { ProviderTypeManagementPage } from './pages/settings/ProviderTypeManagementPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
+import { ProviderRegisterSuccessPage } from './pages/providers/ProviderRegisterSuccessPage';
+import { ProviderRequestFormPage } from './pages/providers/ProviderRequestFormPage';
+import { MyProviderRequestsPage } from './pages/providers/MyProviderRequestsPage';
+import { ProviderRequestsQueuePage } from './pages/providers/ProviderRequestsQueuePage';
+
 import './styles/custom-animations.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -50,6 +55,7 @@ const PublicRoute = ({ children }) => {
     if (roleNames.includes('proveedor'))           return <Navigate to="/provider/dashboard" replace />;
     if (roleNames.includes('seguridad'))           return <Navigate to="/security/calendar" replace />;
     if (roleNames.includes('ingeniero_alimentos')) return <Navigate to="/food-engineer" replace />;
+    if (roleNames.includes('emp_solicitante'))     return <Navigate to="/my-requests" replace />; 
     return <Navigate to="/dashboard" replace />;
   }
   return children;
@@ -64,6 +70,9 @@ function App() {
           <Route path="/login"           element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
           <Route path="/reset-password"  element={<ResetPasswordPage />} />
+          {/* ✅ Ruta estática de éxito — debe ir ANTES de /register/:token para no ser
+              capturada como si "success" fuera un token de invitación */}
+          <Route path="/register/success" element={<ProviderRegisterSuccessPage />} />
           <Route path="/register/:token" element={<ProviderRegisterPage />} />
 
           {/* ── DashboardLayout ── */}
@@ -139,6 +148,22 @@ function App() {
                 <DocumentValidationPage />
               </RoleProtectedRoute>
             } />
+            <Route path="request-provider" element={
+            <RoleProtectedRoute allowedRoles={['emp_solicitante','super_admin','admin','compras']}>
+              <ProviderRequestFormPage />
+            </RoleProtectedRoute>
+            } />
+            <Route path="my-requests" element={
+              <RoleProtectedRoute allowedRoles={['emp_solicitante','super_admin','admin','compras']}>
+                <MyProviderRequestsPage />
+              </RoleProtectedRoute>
+            } />
+            <Route path="provider-requests" element={
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','compras']}>
+                <ProviderRequestsQueuePage />
+              </RoleProtectedRoute>
+            } />
+
 
             {/* ── Configuración ── */}
             <Route path="settings/catalog" element={

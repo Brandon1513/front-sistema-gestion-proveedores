@@ -24,7 +24,7 @@ import toast from 'react-hot-toast';
 import {
   ArrowLeft, Edit, Building2, MapPin, Phone, Mail, CreditCard,
   FileText, Users, Truck, Award, Plus, Trash2, Pencil,
-  AlertCircle, ShieldCheck, Package,
+  AlertCircle, ShieldCheck, Package, Tag, UserCircle,
 } from 'lucide-react';
 
 const STATUS_OPTIONS = [
@@ -96,9 +96,9 @@ export const ProviderDetailPage = () => {
   const isAdminOrSuper  = ['super_admin', 'admin'].includes(userRole);
   const isCalidad       = userRole === 'calidad';
   const isCompras       = userRole === 'compras';
-  const isIngeniero     = userRole === 'ingeniero_alimentos'; // 
-  const canEdit         = isCompras || isAdminOrSuper;        // ingeniero NO puede editar
-  const canChangeStatus = isCalidad || isAdminOrSuper;        // ingeniero NO puede cambiar estado
+  const isIngeniero     = userRole === 'ingeniero_alimentos';
+  const canEdit         = isCompras || isAdminOrSuper;
+  const canChangeStatus = isCalidad || isAdminOrSuper;
 
   const { data: provider, isLoading, error } = useQuery({
     queryKey: ['provider', id],
@@ -212,6 +212,19 @@ export const ProviderDetailPage = () => {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">{providerData.business_name}</h1>
               <p className="mt-1 font-mono text-sm text-gray-600">RFC: {providerData.rfc}</p>
+              {/* ✅ NUEVO — Departamento y solicitante, visibles junto al título */}
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                {providerData.department?.name && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700 border border-indigo-200">
+                    <Tag className="w-3 h-3"/>{providerData.department.name}
+                  </span>
+                )}
+                {providerData.requested_by?.name && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-200">
+                    <UserCircle className="w-3 h-3"/>Solicitado por: {providerData.requested_by.name}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -285,6 +298,9 @@ const GeneralInfo = ({ provider, productsData }) => {
           <InfoRow                  label="RFC"                 value={provider.rfc} />
           <InfoRow                  label="Representante Legal" value={provider.legal_representative || 'N/A'} />
           <InfoRow                  label="Tipo de Proveedor"   value={provider.provider_type?.name || 'N/A'} />
+          {/* ✅ NUEVO */}
+          <InfoRow icon={Tag}       label="Departamento"        value={provider.department?.name || 'Sin asignar'} />
+          <InfoRow icon={UserCircle} label="Solicitado por"     value={provider.requested_by?.name || 'Registro directo (sin solicitud interna)'} />
         </div>
       </Card>
 

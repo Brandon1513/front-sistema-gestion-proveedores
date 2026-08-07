@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { providerService } from '../../api/providerService';
 import { providerTypeService } from '../../api/providerTypeService';
+import { departmentService } from '../../api/departmentService';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
@@ -119,6 +120,7 @@ export const ProviderFormPage = () => {
 
   const [formData, setFormData] = useState({
     provider_type_id:     '',
+    department_id:        '', // ✅ NUEVO
     business_name:        '',
     rfc:                  '',
     tipo_persona:         '',
@@ -141,7 +143,6 @@ export const ProviderFormPage = () => {
     status:               'pending',
     observations:         '',
   });
-
   // ✅ Ciudad personalizada (cuando el estado no tiene la ciudad en la lista)
   const [customCity, setCustomCity] = useState('');
 
@@ -159,6 +160,14 @@ export const ProviderFormPage = () => {
     queryKey: ['provider-types'],
     queryFn: providerTypeService.getAll,
   });
+
+  // ✅ NUEVO — catálogo de departamentos
+  const { data: deptData } = useQuery({
+    queryKey: ['departments'],
+    queryFn: () => departmentService.getAll(),
+    staleTime: 10 * 60 * 1000,
+  });
+  const departments = deptData?.departments || [];
 
   const { data: catalogData } = useQuery({
     queryKey: ['catalog-for-form'],
@@ -183,6 +192,7 @@ export const ProviderFormPage = () => {
       const p = providerData.provider;
       setFormData({
         provider_type_id:     p.provider_type_id     || '',
+        department_id:        p.department_id        || p.department?.id || '', // ✅ NUEVO
         business_name:        p.business_name        || '',
         rfc:                  p.rfc                  || '',
         tipo_persona: p.tipo_persona || (p.rfc?.length === 13 ? 'fisica' : 'moral'),
@@ -333,6 +343,10 @@ export const ProviderFormPage = () => {
             <Select label="Tipo de Proveedor *" name="provider_type_id" value={formData.provider_type_id} onChange={handleChange}
               options={[{ value:'', label:'Selecciona un tipo...' }, ...(typesData?.provider_types?.map(t => ({ value:t.id, label:t.name })) || [])]}
               error={errors.provider_type_id?.[0]} required />
+            {/* ✅ NUEVO — Departamento */}
+            <Select label="Departamento" name="department_id" value={formData.department_id} onChange={handleChange}
+              options={[{ value:'', label:'Sin asignar' }, ...departments.map(d => ({ value:d.id, label:d.name }))]}
+              error={errors.department_id?.[0]} />
             <Input label="Razón Social *"      name="business_name"        value={formData.business_name}        onChange={handleChange} error={errors.business_name?.[0]}        required />
             <div>
             <Input
@@ -346,7 +360,6 @@ export const ProviderFormPage = () => {
               helperText="12 caracteres = Persona Moral · 13 caracteres = Persona Física"
               className="font-mono uppercase"
             />
-
             {/* Badge de detección + selector manual */}
             {formData.rfc.length >= 12 && (
               <div className="flex flex-wrap items-center gap-2 mt-2">
@@ -444,7 +457,7 @@ export const ProviderFormPage = () => {
         <Card title={<div className="flex items-center gap-2"><Phone className="w-5 h-5 text-primary-600" /><span>Información de Contacto</span></div>} variant="elevated">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Input label="Teléfono"           name="phone" value={formData.phone} onChange={handleChange} error={errors.phone?.[0]} placeholder="33 1234 5678" />
-            <Input label="Correo Electrónico" type="email" name="email" value={formData.email} onChange={handleChange} error={errors.email?.[0]} placeholder="correo@empresa.com" />
+            <Input label="Correo Electrónico *" type="email" name="email" value={formData.email} onChange={handleChange} error={errors.email?.[0]} placeholder="correo@empresa.com" required />
           </div>
         </Card>
 
@@ -477,6 +490,7 @@ export const ProviderFormPage = () => {
                 </p>
               </div>
             )}
+
             <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
               {[['products','Productos',Package],['services','Servicios',Wrench]].map(([val,label,Icon]) => (
                 <button key={val} type="button" onClick={() => setCatalogTab(val)}

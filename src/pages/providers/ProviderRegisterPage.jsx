@@ -16,6 +16,7 @@ const STEPS = [
   { id: 1, label: 'Información General' },
   { id: 2, label: 'Dirección'           },
   { id: 3, label: 'Datos Bancarios'     },
+  { id: 4, label: 'Contacto'            },
 ];
 
 export const ProviderRegisterPage = () => {
@@ -48,10 +49,18 @@ export const ProviderRegisterPage = () => {
     password_confirmation:'',
   });
 
+  // ✅ NUEVO — contacto obligatorio (paso 4)
+  const [contact, setContact] = useState({
+    type:  'sales',
+    name:  '',
+    phone: '',
+    email: '',
+  });
+
   // ── Cargar invitación ─────────────────────────────────────────────────────
   const { data: invitationData, isLoading: loadingInvitation, error: invitationError } = useQuery({
     queryKey: ['invitation', token],
-    queryFn:  () => api.get(`/invitations/${token}`).then(r => r.data),
+    queryFn: () => api.get(`/invitations/verify/${token}`).then(r => r.data),
     enabled:  !!token,
     retry: false,
   });
@@ -59,7 +68,33 @@ export const ProviderRegisterPage = () => {
   // Pre-rellenar email desde la invitación
   useEffect(() => {
     if (invitationData?.invitation?.email) {
-      setFormData(f => ({ ...f, email: invitationData.invitation.email }));
+      const existing = invitationData.existing_provider;
+      setFormData(f => ({
+        ...f,
+        email: invitationData.invitation.email,
+        // ✅ Si Compras ya lo registró manualmente, pre-llenamos todo lo capturado
+        ...(existing ? {
+          business_name:        existing.business_name        || f.business_name,
+          rfc:                  existing.rfc                  || f.rfc,
+          tipo_persona:         existing.tipo_persona          || f.tipo_persona,
+          legal_representative: existing.legal_representative  || f.legal_representative,
+          phone:                existing.phone                 || f.phone,
+          street:               existing.street                || f.street,
+          exterior_number:      existing.exterior_number       || f.exterior_number,
+          interior_number:      existing.interior_number       || f.interior_number,
+          neighborhood:         existing.neighborhood          || f.neighborhood,
+          city:                 existing.city                  || f.city,
+          state:                existing.state                 || f.state,
+          postal_code:          existing.postal_code            || f.postal_code,
+          bank:                 existing.bank                  || f.bank,
+          bank_branch:          existing.bank_branch           || f.bank_branch,
+          account_number:       existing.account_number         || f.account_number,
+          clabe:                existing.clabe                 || f.clabe,
+          credit_amount:        existing.credit_amount          || f.credit_amount,
+          credit_days:          existing.credit_days            || f.credit_days,
+          observations:         existing.observations           || f.observations,
+        } : {}),
+      }));
     }
   }, [invitationData]);
 
@@ -75,14 +110,13 @@ export const ProviderRegisterPage = () => {
       if (errors.rfc) setErrors(p => ({ ...p, rfc: null }));
       return;
     }
-
     setFormData(f => ({ ...f, [name]: value }));
     if (errors[name]) setErrors(p => ({ ...p, [name]: null }));
   };
 
   // ── Mutación de registro ──────────────────────────────────────────────────
   const mutation = useMutation({
-    mutationFn: (data) => api.post(`/invitations/${token}/register`, data).then(r => r.data),
+    mutationFn: (data) => api.post('/register-provider', data).then(r => r.data),
     onSuccess: () => navigate('/register/success'),
     onError: (err) => {
       const apiErrors = err.response?.data?.errors || {};
@@ -90,17 +124,27 @@ export const ProviderRegisterPage = () => {
       // Si hay errores del step 1, volver al step 1
       const step1Fields = ['business_name','rfc','tipo_persona','legal_representative','phone','email','password'];
       const step2Fields = ['street','exterior_number','interior_number','neighborhood','city','state','postal_code'];
+      const step4Fields = ['contacts'];
       if (step1Fields.some(f => apiErrors[f])) setStep(1);
       else if (step2Fields.some(f => apiErrors[f])) setStep(2);
+      else if (step4Fields.some(f => apiErrors[f])) setStep(4);
     },
   });
 
+  // ✅ CORREGIDO — valida el contacto y arma el payload completo
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Asegurar tipo_persona antes de enviar
+    if (!contact.name.trim() || !contact.phone.trim() || !contact.email.trim()) {
+      setErrors({ contacts: ['Debes completar al menos un contacto (nombre, teléfono y correo)'] });
+      setStep(4);
+      return;
+    }
     const dataToSend = {
       ...formData,
+      token,
+      name: formData.legal_representative || formData.business_name,
       tipo_persona: formData.tipo_persona || (formData.rfc.length === 13 ? 'fisica' : 'moral'),
+      contacts: [contact],
     };
     mutation.mutate(dataToSend);
   };
@@ -421,6 +465,54 @@ export const ProviderRegisterPage = () => {
                     className={`${inputClass('observations')} resize-none`}/>
                   <FieldError field="observations"/>
                 </div>
+              </div>
+            )}
+
+            {/* ── STEP 4: Contacto (obligatorio) ── */}
+            {step === 4 && (
+              <div className="p-6 space-y-5">
+                <h2 className="flex items-center gap-2 pb-3 text-base font-bold text-gray-900 border-b border-gray-100">
+                  <User className="w-5 h-5 text-primary-500"/>Contacto
+                </h2>
+
+                <div className="flex items-start gap-2 p-3 border border-blue-200 rounded-xl bg-blue-50">
+                  <AlertCircle className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5"/>
+                  <p className="text-xs text-blue-700">
+                    Registra al menos un contacto de tu empresa (puede ser de ventas, cobranza o calidad).
+                    Este será el punto de contacto para dar seguimiento a tu proveeduría.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block mb-1.5 text-sm font-semibold text-gray-700">Tipo de contacto *</label>
+                  <select value={contact.type} onChange={e => setContact(c => ({ ...c, type: e.target.value }))}
+                    className="w-full px-4 py-3 text-sm bg-white border-2 border-gray-200 rounded-xl focus:outline-none focus:border-primary-500">
+                    <option value="sales">Ventas</option>
+                    <option value="billing">Cobranza</option>
+                    <option value="quality">Calidad</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block mb-1.5 text-sm font-semibold text-gray-700">Nombre completo *</label>
+                  <input value={contact.name} onChange={e => setContact(c => ({ ...c, name: e.target.value }))}
+                    placeholder="Nombre del contacto" className={inputClass('contacts')}/>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block mb-1.5 text-sm font-semibold text-gray-700">Teléfono *</label>
+                    <input value={contact.phone} onChange={e => setContact(c => ({ ...c, phone: e.target.value }))}
+                      placeholder="33 1234 5678" className={inputClass('contacts')}/>
+                  </div>
+                  <div>
+                    <label className="block mb-1.5 text-sm font-semibold text-gray-700">Correo *</label>
+                    <input type="email" value={contact.email} onChange={e => setContact(c => ({ ...c, email: e.target.value }))}
+                      placeholder="contacto@empresa.com" className={inputClass('contacts')}/>
+                  </div>
+                </div>
+
+                <FieldError field="contacts"/>
 
                 {/* Error general */}
                 {mutation.isError && !Object.keys(errors).length && (
