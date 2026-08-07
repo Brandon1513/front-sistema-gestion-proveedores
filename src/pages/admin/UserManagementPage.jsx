@@ -209,8 +209,25 @@ const InternalUsersTab = () => {
   });
 
   const isCurrentUser  = (user) => user.id === currentUser?.id;
-  const getRoleBadgeVariant = (r) => ({ super_admin: 'rejected', admin: 'pending', compras: 'info', calidad: 'active' }[r] || 'info');
-  const getRoleLabel        = (r) => ({ super_admin: 'Super Admin', admin: 'Administrador', compras: 'Compras', calidad: 'Calidad' }[r] || r);
+  const getRoleBadgeVariant = (r) => ({
+  super_admin: 'rejected',
+  admin: 'pending',
+  compras: 'info',
+  calidad: 'active',
+  seguridad: 'warning',           
+  ingeniero_alimentos: 'success', 
+  emp_solicitante: 'info',        
+}[r] || 'info');
+
+const getRoleLabel = (r) => ({
+  super_admin: 'Super Admin',
+  admin: 'Administrador',
+  compras: 'Compras',
+  calidad: 'Calidad',
+  seguridad: 'Seguridad',              
+  ingeniero_alimentos: 'Ing. Alimentos', 
+  emp_solicitante: 'Solicitante',        
+}[r] || r);
 
   const users = data?.data || [];
   const meta  = data ? { current_page: data.current_page, last_page: data.last_page, from: data.from, to: data.to, total: data.total } : null;
@@ -250,6 +267,9 @@ const InternalUsersTab = () => {
             <option value="admin">Administrador</option>
             <option value="compras">Compras</option>
             <option value="calidad">Calidad</option>
+            <option value="seguridad">Seguridad</option>             
+            <option value="ingeniero_alimentos">Ingeniero de Alimentos</option>
+            <option value="emp_solicitante">Solicitante de Alta</option>       
           </select>
           <select value={activeFilter} onChange={(e) => setActiveFilter(e.target.value)}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500">

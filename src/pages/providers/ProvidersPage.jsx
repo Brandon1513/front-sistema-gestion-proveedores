@@ -231,7 +231,7 @@ export const ProvidersPage = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    {['Razón Social', 'RFC', 'Tipo', 'Estado', 'Ciudad', 'Acciones'].map((col) => (
+                    {['Razón Social', 'RFC', 'Tipo', 'Departamento', 'Estado', 'Ciudad', 'Acciones'].map((col) => (
                       <th key={col} className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">{col}</th>
                     ))}
                   </tr>
@@ -242,6 +242,12 @@ export const ProvidersPage = () => {
                       <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">{provider.business_name}</td>
                       <td className="px-6 py-4 font-mono text-sm text-gray-600 whitespace-nowrap">{provider.rfc}</td>
                       <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">{provider.provider_type?.name || 'N/A'}</td>
+                      {/* ✅ NUEVO — Departamento */}
+                      <td className="px-6 py-4 text-sm whitespace-nowrap">
+                        {provider.department?.name
+                          ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">{provider.department.name}</span>
+                          : <span className="text-xs text-gray-400 italic">Sin asignar</span>}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(provider.status)}</td>
                       <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">{provider.city || 'N/A'}</td>
                       <td className="px-6 py-4 text-sm whitespace-nowrap">
