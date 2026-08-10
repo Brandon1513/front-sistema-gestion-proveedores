@@ -20,6 +20,7 @@ const EVENT_CONFIG = {
   appointment_no_show:         { icon: UserX,       bg: 'bg-orange-100', color: 'text-orange-600' },
   appointment_entry_confirmed: { icon: CheckCircle, bg: 'bg-green-100',  color: 'text-green-600'  },
   calendar_block_created:      { icon: Ban,         bg: 'bg-red-100',    color: 'text-red-600'    },
+  provider_request_created:    { icon: Send,        bg: 'bg-teal-100',   color: 'text-teal-600'   },
 };
 const getEventConfig = (type) => EVENT_CONFIG[type] || { icon: Activity, bg: 'bg-gray-100', color: 'text-gray-500' };
 

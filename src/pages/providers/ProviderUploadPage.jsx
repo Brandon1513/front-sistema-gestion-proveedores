@@ -13,7 +13,9 @@ import {
   Package, ChevronDown, Download, FileBadge,
 } from 'lucide-react';
 
-// Documentos que usan selector de productos
+// Códigos VIEJOS que ya usan selector de producto (se mantienen por
+// compatibilidad — no se migran). Los documentos NUEVOS marcados como
+// is_product_specific ya no necesitan aparecer aquí.
 const PRODUCT_SELECTOR_CODES = [
   'carta_garantia',
   'fichas_tecnicas',
@@ -22,9 +24,6 @@ const PRODUCT_SELECTOR_CODES = [
   'carta_declaracion',
   'cartas_declaracion',
 ];
-
-// Documentos que tienen templates de formato descargable
-const TEMPLATE_DOC_CODES = ['carta_garantia', 'carta_no_trabajo_infantil'];
 
 export const ProviderUploadPage = () => {
   const navigate    = useNavigate();
@@ -67,22 +66,19 @@ export const ProviderUploadPage = () => {
 
   const { allowed: canUpload, reason: blockReason } = canUploadDocument(selectedDocInfo);
 
-  // ¿Usa selector de productos?
+  // ✅ GENERALIZADO — usa selector de producto si el documento trae el
+  // código legado O si el admin lo marcó como "is_product_specific" desde
+  // el nuevo checkbox en Gestión de Documentos.
   const usesProductSelector = !!(
-    selectedDocInfo?.code &&
-    PRODUCT_SELECTOR_CODES.includes(selectedDocInfo.code) &&
-    selectedDocInfo?.allows_multiple
+    selectedDocInfo?.allows_multiple && (
+      (selectedDocInfo?.code && PRODUCT_SELECTOR_CODES.includes(selectedDocInfo.code)) ||
+      selectedDocInfo?.is_product_specific
+    )
   );
 
-  // ¿Tiene template de formato?
-  const hasTemplate = !!(selectedDocInfo?.code && TEMPLATE_DOC_CODES.includes(selectedDocInfo.code));
-
-  // ✅ ¿Es documento de formato único (sin selector de productos)?
-  const isSingleFormatDoc = !!(
-    selectedDocInfo?.code &&
-    TEMPLATE_DOC_CODES.includes(selectedDocInfo.code) &&
-    !PRODUCT_SELECTOR_CODES.includes(selectedDocInfo.code)
-  );
+  // Documento "de formato único" = no usa selector de producto. Cualquier
+  // documento sin selector puede mostrar plantillas genéricas si existen.
+  const isSingleFormatDoc = !!(selectedDocInfo && !usesProductSelector);
 
   // Nombre del producto seleccionado
   const selectedProductName = useMemo(() => {
@@ -90,27 +86,26 @@ export const ProviderUploadPage = () => {
     return allMyItems.find(p => String(p.id) === String(selectedProductId))?.name || '';
   }, [usesProductSelector, selectedProductId, allMyItems]);
 
-  // ✅ Template para documentos CON selector de producto (Carta Garantía)
+  // ✅ Template para documentos CON selector de producto (Carta Garantía,
+  // y ahora cualquier documento nuevo marcado is_product_specific)
   const { data: templateData } = useQuery({
     queryKey: ['document-template', selectedDocInfo?.id, selectedProductName],
     queryFn: () => api.get('/document-templates/by-product', {
       params: { document_type_id: selectedDocInfo?.id, product_name: selectedProductName }
     }).then(r => r.data),
-    enabled: hasTemplate && !isSingleFormatDoc && !!selectedDocInfo?.id && !!selectedProductName,
+    enabled: usesProductSelector && !!selectedDocInfo?.id && !!selectedProductName,
     staleTime: 5 * 60 * 1000,
   });
   const template = templateData?.template || null;
 
-  // ✅ Template para documentos SIN selector de producto (Carta No Trabajo Infantil)
-  const { data: singleTemplateData } = useQuery({
-    queryKey: ['document-template-single', selectedDocInfo?.id],
-    queryFn: () => api.get('/document-templates/by-product', {
-      params: { document_type_id: selectedDocInfo?.id, product_name: 'general' }
-    }).then(r => r.data),
+  // ✅ Plantillas genéricas (sin producto) para documentos de formato único
+  const { data: singleTemplatesData } = useQuery({
+    queryKey: ['document-templates-generic', selectedDocInfo?.id],
+    queryFn: () => api.get(`/document-templates/generic/${selectedDocInfo?.id}`).then(r => r.data),
     enabled: isSingleFormatDoc && !!selectedDocInfo?.id && canUpload,
     staleTime: 5 * 60 * 1000,
   });
-  const singleTemplate = singleTemplateData?.template || null;
+  const singleTemplates = singleTemplatesData?.templates || [];
 
   const alreadyUploadedProducts = useMemo(() => {
     if (!selectedDocInfo?.documents) return new Set();
@@ -203,7 +198,8 @@ export const ProviderUploadPage = () => {
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   };
 
-  // ✅ Descarga de template genérica
+  // Descarga de template genérica (funciona tanto para el de producto como
+  // para los genéricos — solo necesita id + filename)
   const handleDownloadTemplate = async (tmpl) => {
     if (!tmpl) return;
     setDownloadingTemplate(true);
@@ -267,7 +263,7 @@ export const ProviderUploadPage = () => {
     );
   }
 
-  // ─── Helper: recuadro de formato ──────────────────────────────────────────
+  // ─── Helper: recuadro de formato — documentos CON selector de producto ────
   const TemplateBox = ({ tmpl, productLabel }) => (
     <div className={`p-5 border-2 rounded-xl transition-all ${
       tmpl ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'
@@ -308,6 +304,36 @@ export const ProviderUploadPage = () => {
               </p>
             </>
           )}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ─── Helper: recuadro de MÚLTIPLES formatos de apoyo (sin producto) ────────
+  const TemplatesBox = ({ templates }) => (
+    <div className="p-5 border-2 rounded-xl border-emerald-200 bg-emerald-50">
+      <div className="flex items-start gap-3">
+        <div className="flex items-center justify-center flex-shrink-0 w-10 h-10 rounded-lg shadow-sm bg-gradient-to-br from-emerald-500 to-teal-600">
+          <FileBadge className="w-5 h-5 text-white"/>
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-bold text-emerald-900">
+            Este documento tiene {templates.length > 1 ? 'plantillas' : 'una plantilla'} de apoyo disponible{templates.length > 1 ? 's' : ''}
+          </p>
+          <p className="mt-1 text-xs text-emerald-700">
+            Descárga{templates.length > 1 ? 'las' : 'la'}, complétala con la información solicitada y súbela aquí.
+          </p>
+          <div className="flex flex-col gap-2 mt-3">
+            {templates.map(t => (
+              <button key={t.id} type="button"
+                onClick={() => handleDownloadTemplate({ id: t.id, filename: t.original_filename })}
+                disabled={downloadingTemplate}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm bg-emerald-600 hover:bg-emerald-700 rounded-xl disabled:opacity-60 w-fit">
+                <Download className="w-4 h-4"/>
+                {downloadingTemplate ? 'Descargando...' : `Descargar: ${t.original_filename}`}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -417,9 +443,9 @@ export const ProviderUploadPage = () => {
           )}
         </div>
 
-        {/* ✅ Recuadro de formato para documentos SIN producto (Carta No Trabajo Infantil) */}
-        {isSingleFormatDoc && canUpload && (
-          <TemplateBox tmpl={singleTemplate} productLabel={null}/>
+        {/* ✅ Recuadro de formatos para documentos SIN producto */}
+        {isSingleFormatDoc && canUpload && singleTemplates.length > 0 && (
+          <TemplatesBox templates={singleTemplates}/>
         )}
 
         {/* ── Selector de producto ───────────────────────────────────────────── */}
@@ -494,8 +520,8 @@ export const ProviderUploadPage = () => {
           </div>
         )}
 
-        {/* ✅ Recuadro de formato para documentos CON producto (Carta Garantía) */}
-        {hasTemplate && !isSingleFormatDoc && selectedProductName && canUpload && !selectedProductAlreadyUploaded && (
+        {/* ✅ Recuadro de formato para documentos CON producto */}
+        {usesProductSelector && selectedProductName && canUpload && !selectedProductAlreadyUploaded && (
           <TemplateBox tmpl={template} productLabel={selectedProductName}/>
         )}
 
@@ -560,6 +586,7 @@ export const ProviderUploadPage = () => {
                     className="w-full py-3 pl-10 pr-4 transition-all border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"/>
                 </div>
               </div>
+
               <div>
                 <label className="block mb-2 text-sm font-semibold text-gray-700">
                   Fecha de Vencimiento {!hasAutoExpiry && <span className="text-red-500">*</span>}
