@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast';
 import { LoginPage } from './pages/auth/LoginPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
+import { MicrosoftCallbackPage } from './pages/auth/MicrosoftCallbackPage';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { ProviderLayout } from './layouts/ProviderLayout';
@@ -39,6 +40,8 @@ import { ProviderRegisterSuccessPage } from './pages/providers/ProviderRegisterS
 import { ProviderRequestFormPage } from './pages/providers/ProviderRequestFormPage';
 import { MyProviderRequestsPage } from './pages/providers/MyProviderRequestsPage';
 import { ProviderRequestsQueuePage } from './pages/providers/ProviderRequestsQueuePage';
+import { ProviderAccountStatementPage } from './pages/providers/ProviderAccountStatementPage';
+import { FinanceAccountStatementPage } from './pages/finance/FinanceAccountStatementPage';
 
 import './styles/custom-animations.css';
 
@@ -70,6 +73,10 @@ function App() {
           <Route path="/login"           element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
           <Route path="/reset-password"  element={<ResetPasswordPage />} />
+          {/* ✅ Callback de OAuth de Microsoft — sin PublicRoute porque el usuario
+              aún no está autenticado al llegar aquí; la página misma hace el
+              intercambio de código y luego navega según el rol. */}
+          <Route path="/auth/microsoft/callback" element={<MicrosoftCallbackPage />} />
           {/* ✅ Ruta estática de éxito — debe ir ANTES de /register/:token para no ser
               capturada como si "success" fuera un token de invitación */}
           <Route path="/register/success" element={<ProviderRegisterSuccessPage />} />
@@ -119,7 +126,12 @@ function App() {
                 <ReportsPage />
               </RoleProtectedRoute>
             } />
-
+            <Route path="finance/account-statement" element={
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','compras','finanzas']}>
+                <FinanceAccountStatementPage />
+              </RoleProtectedRoute>
+            } />
+            
             <Route path="providers" element={
               <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','compras','ingeniero_alimentos']}>
                 <ProvidersPage />
@@ -192,6 +204,7 @@ function App() {
           }>
             <Route path="/provider/dashboard"      element={<ProviderDashboardPage />} />
             <Route path="/provider/documents"      element={<ProviderDocumentsPage />} />
+            <Route path="/provider/account-statement" element={<ProviderAccountStatementPage />} />
             <Route path="/provider/upload"         element={<ProviderUploadPage />} />
             <Route path="/provider/certifications" element={<ProviderCertificationsPage />} />
             <Route path="/provider/profile"        element={<ProviderProfilePage />} />

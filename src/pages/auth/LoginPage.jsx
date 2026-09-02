@@ -1,18 +1,53 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { authService } from '../../api/authService';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
-import { AlertCircle, Mail } from 'lucide-react';
+import { AlertCircle, Mail, Clock } from 'lucide-react';
+
+const MS_ERROR_MESSAGES = {
+  domain_not_allowed: 'Ese correo no pertenece a DASAVENA. El acceso con Microsoft es exclusivo para empleados.',
+  account_inactive: 'Tu cuenta está inactiva. Contacta al administrador del sistema.',
+  auth_failed: 'No se pudo completar el inicio de sesión con Microsoft. Intenta de nuevo.',
+  exchange_failed: 'Tu sesión de Microsoft expiró antes de completarse. Intenta de nuevo.',
+  missing_code: 'No se recibió información de Microsoft. Intenta de nuevo.',
+};
+
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost/api').replace(/\/api\/?$/, '');
 
 export const LoginPage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const setAuth = useAuthStore((state) => state.setAuth);
 
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [sessionNotice, setSessionNotice] = useState(null);
+
+  // ✅ Detecta si llegamos aquí porque el token expiró, no autorizó,
+  // o falló el login con Microsoft
+  useEffect(() => {
+    const reason = searchParams.get('reason');
+    const msError = searchParams.get('ms_error');
+
+    if (reason === 'expired') {
+      setSessionNotice('Tu sesión expiró por inactividad. Vuelve a iniciar sesión.');
+    } else if (reason === 'unauthorized') {
+      setSessionNotice('Tu sesión ya no es válida. Vuelve a iniciar sesión.');
+    } else if (msError) {
+      setError({ message: MS_ERROR_MESSAGES[msError] || 'No se pudo iniciar sesión con Microsoft.', is_inactive: false });
+    }
+
+    // Limpiamos el query param de la URL sin recargar la página
+    if (reason || msError) {
+      searchParams.delete('reason');
+      searchParams.delete('ms_error');
+      setSearchParams(searchParams, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -23,6 +58,7 @@ export const LoginPage = () => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setSessionNotice(null);
 
     try {
       const response = await authService.login(formData);
@@ -48,6 +84,12 @@ export const LoginPage = () => {
     }
   };
 
+  // ✅ Redirige el navegador (no fetch) al flujo de OAuth de Microsoft.
+  // Esta ruta vive en web.php, por eso quitamos el prefijo /api.
+  const handleMicrosoftLogin = () => {
+    window.location.href = `${API_BASE_URL}/auth/microsoft/redirect`;
+  };
+
   return (
     <div className="flex items-center justify-center min-h-screen p-4 bg-gradient-to-br from-primary-50 to-primary-100">
       <div className="w-full max-w-md">
@@ -58,6 +100,14 @@ export const LoginPage = () => {
             <h1 className="mb-2 text-3xl font-bold text-gray-900">SGP</h1>
             <p className="text-gray-600">Sistema de Gestión de Proveedores</p>
           </div>
+
+          {/* ✅ Aviso de sesión expirada / no autorizada */}
+          {sessionNotice && (
+            <div className="flex items-start p-4 mb-6 border border-blue-200 bg-blue-50 rounded-xl">
+              <Clock className="w-5 h-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-blue-700">{sessionNotice}</p>
+            </div>
+          )}
 
           {/* Error genérico */}
           {error && !error.is_inactive && (
@@ -132,6 +182,31 @@ export const LoginPage = () => {
               Iniciar sesión
             </Button>
           </form>
+
+          {/* ✅ Separador */}
+          <div className="flex items-center gap-3 my-6">
+            <div className="flex-1 h-px bg-gray-200" />
+            <span className="text-xs font-medium text-gray-400">¿Eres empleado?</span>
+            <div className="flex-1 h-px bg-gray-200" />
+          </div>
+
+          {/* ✅ Botón de Microsoft — solo para empleados internos */}
+          <button
+            type="button"
+            onClick={handleMicrosoftLogin}
+            className="flex items-center justify-center w-full gap-3 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors bg-white border border-gray-300 rounded-xl hover:bg-gray-50"
+          >
+            <svg width="18" height="18" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+              <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+              <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+              <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+            </svg>
+            Iniciar sesión con Microsoft
+          </button>
+          <p className="mt-2 text-xs text-center text-gray-400">
+            Exclusivo para personal de DASAVENA
+          </p>
 
           {/* Credenciales de prueba 
           <div className="p-4 mt-8 border bg-gradient-to-r from-primary-50 to-pink-50 rounded-xl border-primary-200">

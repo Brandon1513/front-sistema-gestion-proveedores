@@ -12,7 +12,7 @@ import {
   Menu, X, Bell, BarChart3, Send, Shield, FlaskConical,
   Settings, FileCog, Package, ChevronDown, ChevronRight,
   PanelLeftClose, PanelLeftOpen, Clock, AlertTriangle, Tag,
-  RefreshCw, UserX, CheckCircle, Ban, Activity, FileSpreadsheet, Inbox
+  RefreshCw, UserX, CheckCircle, Ban, Activity, FileSpreadsheet, Inbox, Wallet
 } from 'lucide-react';
 
 const EVENT_CONFIG = {
@@ -122,6 +122,7 @@ export const DashboardLayout = () => {
     { name: 'Recepción de Productos', href: '/food-engineer',        icon: FlaskConical,    roles: ['super_admin','admin','ingeniero_alimentos'] },
     { name: 'Reportes',               href: '/reports',              icon: FileSpreadsheet, roles: ['super_admin','admin','calidad','compras','ingeniero_alimentos'] },
     { name: 'User Management',        href: '/admin/users',          icon: Users,           roles: ['super_admin','admin'] },
+    { name: 'Estado de Cuenta',       href: '/finance/account-statement', icon: Wallet, roles: ['super_admin','admin','compras','finanzas'] },
   ];
 
   const settingsChildren = [
