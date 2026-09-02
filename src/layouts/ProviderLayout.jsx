@@ -6,7 +6,7 @@ import { CalendarDays } from 'lucide-react';
 import {
   LayoutDashboard, FileText, Upload, User, Award,
   LogOut, Menu, X, Bell, Clock, AlertTriangle,
-  PanelLeftClose, PanelLeftOpen, HelpCircle,
+  PanelLeftClose, PanelLeftOpen, HelpCircle, Wallet,
 } from 'lucide-react';
 import api from '../api/axios';
 
@@ -42,12 +42,13 @@ export const ProviderLayout = () => {
   const expiringDocs  = expiringData?.expiring_documents || [];
   const expiringCount = expiringDocs.length;
 
-  const menuItems = [
+    const menuItems = [
     { title: 'Dashboard',         icon: LayoutDashboard, path: '/provider/dashboard'      },
     { title: 'Mis Documentos',    icon: FileText,        path: '/provider/documents'      },
     { title: 'Cargar Documentos', icon: Upload,          path: '/provider/upload'         },
     { title: 'Certificaciones',   icon: Award,           path: '/provider/certifications' },
     { title: 'Mis Citas',         icon: CalendarDays,    path: '/provider/appointments'   },
+    { title: 'Estado de Cuenta',  icon: Wallet,          path: '/provider/account-statement' },
     { title: 'Mi Perfil',         icon: User,            path: '/provider/profile'        },
     { title: 'Ayuda',             icon: HelpCircle,      path: '/provider/help'           },
   ];

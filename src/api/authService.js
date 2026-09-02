@@ -33,4 +33,10 @@ export const authService = {
     const response = await api.post('/reset-password', data);
     return response.data;
   },
+
+  // ✅ Intercambia el código de un solo uso (del callback de Microsoft) por el token real
+  exchangeMicrosoftCode: async (code) => {
+    const response = await api.post('/auth/microsoft/exchange', { code });
+    return response.data;
+  },
 };

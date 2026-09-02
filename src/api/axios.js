@@ -27,11 +27,20 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    const isLoginRequest = error.config?.url?.includes('/login');
+
+    // Si falla el login (credenciales inválidas), dejamos que el formulario
+    // maneje su propio mensaje de error, sin forzar redirección.
+    if (status === 401 && !isLoginRequest) {
+      const errorCode = error.response?.data?.error_code;
+      const reason = errorCode === 'SESSION_EXPIRED' ? 'expired' : 'unauthorized';
+
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      window.location.href = `/login?reason=${reason}`;
     }
+
     return Promise.reject(error);
   }
 );
