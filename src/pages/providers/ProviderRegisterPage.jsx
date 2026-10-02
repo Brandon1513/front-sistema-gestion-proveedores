@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../../api/axios';
-import { Building2, FileText, CheckCircle, AlertCircle, Loader2, MapPin, Phone, CreditCard, User } from 'lucide-react';
+import { Building2, FileText, CheckCircle, AlertCircle, Loader2, MapPin, Phone, CreditCard, User, LogIn, KeyRound } from 'lucide-react';
 
 const MEXICAN_STATES = [
   'Aguascalientes','Baja California','Baja California Sur','Campeche','Chiapas',
@@ -200,18 +200,60 @@ export const ProviderRegisterPage = () => {
   );
 
   if (invitationError) return (
-    <div className="flex items-center justify-center min-h-screen p-4 bg-gray-50">
-      <div className="w-full max-w-md p-8 space-y-4 text-center bg-white shadow-lg rounded-2xl">
-        <div className="flex items-center justify-center w-16 h-16 mx-auto bg-red-100 rounded-full">
-          <AlertCircle className="w-8 h-8 text-red-600"/>
-        </div>
-        <h2 className="text-xl font-bold text-gray-900">Invitación no válida</h2>
-        <p className="text-sm text-gray-600">
-          Este enlace de invitación no es válido o ha expirado. Contacta al equipo de compras para recibir una nueva invitación.
-        </p>
+  <div className="flex items-center justify-center min-h-screen p-4 bg-gray-50">
+    <div className="w-full max-w-md p-8 space-y-4 text-center bg-white shadow-lg rounded-2xl">
+      <div className="flex items-center justify-center w-16 h-16 mx-auto bg-red-100 rounded-full">
+        <AlertCircle className="w-8 h-8 text-red-600"/>
       </div>
+      <h2 className="text-xl font-bold text-gray-900">Invitación no válida</h2>
+      <p className="text-sm text-gray-600">
+        Este enlace de invitación no es válido o ha expirado. Contacta al equipo de compras para recibir una nueva invitación.
+      </p>
     </div>
-  );
+  </div>
+);
+
+  // ── Ya existe una cuenta de usuario para este correo ────────────────────
+  if (invitationData?.existing_account) {
+    const { name, is_active } = invitationData.existing_account;
+    const email = invitationData.invitation?.email;
+
+    return (
+      <div className="flex items-center justify-center min-h-screen p-4 bg-gradient-to-br from-primary-50 via-white to-pink-50">
+        <div className="w-full max-w-md p-8 space-y-5 text-center bg-white shadow-lg rounded-2xl">
+          <div className="flex items-center justify-center w-16 h-16 mx-auto rounded-full bg-amber-100">
+            <AlertCircle className="w-8 h-8 text-amber-600"/>
+          </div>
+          <h2 className="text-xl font-bold text-gray-900">Ya tienes una cuenta registrada</h2>
+          <p className="text-sm text-gray-600">
+            El correo <strong>{email}</strong> ya tiene una cuenta{is_active ? ' activa' : ''} a nombre de{' '}
+            <strong>{name}</strong>. No necesitas completar este formulario — puedes iniciar sesión directamente.
+          </p>
+
+          <div className="space-y-3">
+            <button
+              onClick={() => navigate('/login')}
+              className="flex items-center justify-center w-full gap-2 px-6 py-3 text-sm font-semibold text-white transition-colors bg-primary-600 rounded-xl hover:bg-primary-700"
+            >
+              <LogIn className="w-4 h-4" />
+              Iniciar sesión
+            </button>
+            <button
+              onClick={() => navigate('/forgot-password')}
+              className="flex items-center justify-center w-full gap-2 px-6 py-3 text-sm font-semibold text-gray-700 transition-colors border-2 border-gray-200 rounded-xl hover:bg-gray-50"
+            >
+              <KeyRound className="w-4 h-4" />
+              Olvidé mi contraseña
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-400">
+            ¿Crees que esto es un error? Contacta a compras en <span className="text-primary-600">compras@dasavena.com</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const invitation     = invitationData?.invitation;
   const providerType   = invitationData?.provider_type;

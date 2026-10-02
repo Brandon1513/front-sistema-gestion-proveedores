@@ -6,7 +6,7 @@ import { Select } from '../common/Select';
 import { Button } from '../common/Button';
 import { invitationService } from '../../api/invitationService';
 import { providerTypeService } from '../../api/providerTypeService';
-import { AlertCircle, CheckCircle, Mail, Send } from 'lucide-react';
+import { AlertCircle, CheckCircle, Mail, Send, AlertTriangle } from 'lucide-react';
 
 export const InviteProviderModal = ({ isOpen, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
@@ -15,26 +15,31 @@ export const InviteProviderModal = ({ isOpen, onClose, onSuccess }) => {
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState(null); // { name, is_active }
 
-  // Obtener tipos de proveedores
   const { data: typesData, isLoading: loadingTypes } = useQuery({
     queryKey: ['provider-types'],
     queryFn: providerTypeService.getAll,
     enabled: isOpen,
   });
 
-  // Mutación para enviar invitación
   const mutation = useMutation({
-    mutationFn: invitationService.send,
+    mutationFn: (payload) => invitationService.send(payload),
     onSuccess: () => {
       setSuccess(true);
+      setDuplicateWarning(null);
       setTimeout(() => {
         onSuccess();
         handleClose();
       }, 2000);
     },
-    onError: (error) => {
-      setError(error.response?.data?.message || 'Error al enviar invitación');
+    onError: (err) => {
+      if (err.response?.status === 409 && err.response?.data?.code === 'EMAIL_HAS_ACCOUNT') {
+        setDuplicateWarning(err.response.data.existing_account);
+        setError('');
+        return;
+      }
+      setError(err.response?.data?.message || 'Error al enviar invitación');
     },
   });
 
@@ -45,11 +50,12 @@ export const InviteProviderModal = ({ isOpen, onClose, onSuccess }) => {
     });
     setError('');
     setSuccess(false);
+    setDuplicateWarning(null);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+
     if (!formData.email || !formData.provider_type_id) {
       setError('Todos los campos son requeridos');
       return;
@@ -58,10 +64,15 @@ export const InviteProviderModal = ({ isOpen, onClose, onSuccess }) => {
     mutation.mutate(formData);
   };
 
+  const handleConfirmAnyway = () => {
+    mutation.mutate({ ...formData, confirm_send_anyway: true });
+  };
+
   const handleClose = () => {
     setFormData({ email: '', provider_type_id: '' });
     setError('');
     setSuccess(false);
+    setDuplicateWarning(null);
     onClose();
   };
 
@@ -79,30 +90,41 @@ export const InviteProviderModal = ({ isOpen, onClose, onSuccess }) => {
       }
       size="md"
       footer={
-        <>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleClose}
-            disabled={mutation.isPending}
-          >
-            Cancelar
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            loading={mutation.isPending}
-            disabled={success}
-            onClick={handleSubmit}
-            leftIcon={<Send className="w-4 h-4" />}
-          >
-            Enviar Invitación
-          </Button>
-        </>
+        duplicateWarning ? (
+          <>
+            <Button type="button" variant="ghost" onClick={handleClose} disabled={mutation.isPending}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              loading={mutation.isPending}
+              onClick={handleConfirmAnyway}
+              leftIcon={<Send className="w-4 h-4" />}
+            >
+              Enviar de todos modos
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button type="button" variant="ghost" onClick={handleClose} disabled={mutation.isPending}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              loading={mutation.isPending}
+              disabled={success}
+              onClick={handleSubmit}
+              leftIcon={<Send className="w-4 h-4" />}
+            >
+              Enviar Invitación
+            </Button>
+          </>
+        )
       }
     >
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Mensaje de éxito */}
         {success && (
           <div className="p-4 border-2 border-green-300 rounded-xl bg-gradient-to-r from-green-50 to-green-50/50 animate-fade-in">
             <div className="flex items-start gap-3">
@@ -110,9 +132,7 @@ export const InviteProviderModal = ({ isOpen, onClose, onSuccess }) => {
                 <CheckCircle className="w-6 h-6 text-green-600" />
               </div>
               <div>
-                <p className="mb-1 text-sm font-bold text-green-900">
-                  ¡Invitación Enviada!
-                </p>
+                <p className="mb-1 text-sm font-bold text-green-900">¡Invitación Enviada!</p>
                 <p className="text-sm text-green-700">
                   El proveedor recibirá un correo electrónico con las instrucciones para registrarse.
                 </p>
@@ -121,7 +141,22 @@ export const InviteProviderModal = ({ isOpen, onClose, onSuccess }) => {
           </div>
         )}
 
-        {/* Mensaje de error */}
+        {duplicateWarning && (
+          <div className="p-4 border-2 border-amber-300 rounded-xl bg-amber-50 animate-fade-in">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="mb-1 font-bold text-amber-900">Ya existe una cuenta con este correo</p>
+                <p className="text-amber-800">
+                  <strong>{duplicateWarning.name}</strong> ya tiene una cuenta
+                  {duplicateWarning.is_active ? ' activa' : ' registrada'} y puede iniciar sesión directamente,
+                  sin necesitar esta invitación. ¿Seguro que quieres enviarla de todos modos?
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="p-4 border-2 border-red-300 rounded-xl bg-red-50 animate-shake">
             <div className="flex items-start gap-3">
@@ -131,22 +166,20 @@ export const InviteProviderModal = ({ isOpen, onClose, onSuccess }) => {
           </div>
         )}
 
-        {/* Información */}
-        <div className="p-4 border rounded-xl bg-primary-50 border-primary-200">
-          <div className="flex items-start gap-3">
-            <Mail className="w-5 h-5 text-primary-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm">
-              <p className="mb-1 font-semibold text-primary-900">
-                ¿Cómo funciona?
-              </p>
-              <p className="text-primary-700">
-                El proveedor recibirá un correo electrónico con un enlace único para completar su registro y subir la documentación requerida.
-              </p>
+        {!duplicateWarning && (
+          <div className="p-4 border rounded-xl bg-primary-50 border-primary-200">
+            <div className="flex items-start gap-3">
+              <Mail className="w-5 h-5 text-primary-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="mb-1 font-semibold text-primary-900">¿Cómo funciona?</p>
+                <p className="text-primary-700">
+                  El proveedor recibirá un correo electrónico con un enlace único para completar su registro y subir la documentación requerida.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Formulario */}
         <Input
           label="Correo electrónico del proveedor"
           type="email"
@@ -154,6 +187,7 @@ export const InviteProviderModal = ({ isOpen, onClose, onSuccess }) => {
           value={formData.email}
           onChange={handleChange}
           required
+          disabled={!!duplicateWarning}
           placeholder="proveedor@ejemplo.com"
           leftIcon={<Mail className="w-5 h-5 text-gray-400" />}
           helperText="El proveedor recibirá la invitación en este correo"
@@ -164,6 +198,7 @@ export const InviteProviderModal = ({ isOpen, onClose, onSuccess }) => {
           name="provider_type_id"
           value={formData.provider_type_id}
           onChange={handleChange}
+          disabled={!!duplicateWarning}
           options={typesData?.provider_types?.map(type => ({
             value: type.id,
             label: type.name,
@@ -179,16 +214,17 @@ export const InviteProviderModal = ({ isOpen, onClose, onSuccess }) => {
           </div>
         )}
 
-        {/* Información adicional */}
-        <div className="p-4 border border-blue-200 rounded-xl bg-blue-50">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-800">
-              <p className="mb-1 font-medium">Nota importante</p>
-              <p>El enlace de invitación expirará en 7 días. Asegúrate de que el correo electrónico sea correcto.</p>
+        {!duplicateWarning && (
+          <div className="p-4 border border-blue-200 rounded-xl bg-blue-50">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-blue-800">
+                <p className="mb-1 font-medium">Nota importante</p>
+                <p>El enlace de invitación expirará en 7 días. Asegúrate de que el correo electrónico sea correcto.</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </form>
     </Modal>
   );

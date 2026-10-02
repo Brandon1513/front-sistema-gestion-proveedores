@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { providerService } from '../../api/providerService';
@@ -30,7 +30,7 @@ const Pagination = ({ currentPage, lastPage, total, perPage, onPageChange }) => 
   };
 
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 pt-4 mt-2 border-t border-gray-100">
+    <div className="flex flex-col items-center justify-between gap-3 px-2 pt-4 mt-2 border-t border-gray-100 sm:flex-row">
       <p className="text-sm text-gray-500">
         Mostrando <span className="font-semibold text-gray-700">{from}–{to}</span> de{' '}
         <span className="font-semibold text-gray-700">{total}</span> proveedores
@@ -46,8 +46,8 @@ const Pagination = ({ currentPage, lastPage, total, perPage, onPageChange }) => 
         {/* Primera página si estamos lejos */}
         {currentPage > 3 && lastPage > 5 && (
           <>
-            <button onClick={() => onPageChange(1)} className="w-8 h-8 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">1</button>
-            {currentPage > 4 && <span className="px-1 text-gray-400 text-sm">…</span>}
+            <button onClick={() => onPageChange(1)} className="w-8 h-8 text-sm font-medium text-gray-600 transition-colors border border-gray-300 rounded-lg hover:bg-gray-50">1</button>
+            {currentPage > 4 && <span className="px-1 text-sm text-gray-400">…</span>}
           </>
         )}
 
@@ -66,8 +66,8 @@ const Pagination = ({ currentPage, lastPage, total, perPage, onPageChange }) => 
         {/* Última página si estamos lejos */}
         {currentPage < lastPage - 2 && lastPage > 5 && (
           <>
-            {currentPage < lastPage - 3 && <span className="px-1 text-gray-400 text-sm">…</span>}
-            <button onClick={() => onPageChange(lastPage)} className="w-8 h-8 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">{lastPage}</button>
+            {currentPage < lastPage - 3 && <span className="px-1 text-sm text-gray-400">…</span>}
+            <button onClick={() => onPageChange(lastPage)} className="w-8 h-8 text-sm font-medium text-gray-600 transition-colors border border-gray-300 rounded-lg hover:bg-gray-50">{lastPage}</button>
           </>
         )}
 
@@ -85,13 +85,28 @@ const Pagination = ({ currentPage, lastPage, total, perPage, onPageChange }) => 
 export const ProvidersPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [search, setSearch]             = useState('');
+  const [searchInput, setSearchInput] = useState(''); // lo que el usuario ve mientras escribe
+  const [search, setSearch]           = useState(''); // valor "debounced" que dispara la búsqueda real
   const [showInviteModal, setShowInviteModal] = useState(false);
 
   // ✅ Página actual desde URL — persiste al recargar y al usar el botón atrás
   const currentPage  = parseInt(searchParams.get('page') || '1', 10);
   const typeFilter   = searchParams.get('type')   || '';
   const statusFilter = searchParams.get('status') || '';
+
+  // Espera 400ms sin tecleo antes de disparar la búsqueda real — evita
+  // una petición al backend por cada letra.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setSearchParams(prev => {
+        const params = new URLSearchParams(prev);
+        params.delete('page');
+        return params;
+      });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const { user } = useAuthStore();
   const userRole       = user?.roles?.[0]?.name || user?.roles?.[0] || user?.role || '';
@@ -129,17 +144,7 @@ export const ProvidersPage = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Al cambiar búsqueda o filtros → volver a página 1
-  const handleSearchChange = (value) => {
-    setSearch(value);
-    setSearchParams(prev => {
-      const params = new URLSearchParams(prev);
-      params.delete('page');
-      return params;
-    });
-  };
-
-  const clearFilters     = () => { setSearchParams({}); setSearch(''); };
+  const clearFilters     = () => { setSearchParams({}); setSearch(''); setSearchInput(''); };
   const hasActiveFilters = typeFilter || statusFilter || search;
 
   const getStatusBadge = (status) => (
@@ -191,7 +196,7 @@ export const ProvidersPage = () => {
           <div className="relative flex-1">
             <Search className="absolute w-5 h-5 text-gray-400 transform -translate-y-1/2 left-3 top-1/2" />
             <input type="text" placeholder="Buscar por nombre o RFC..."
-              value={search} onChange={(e) => handleSearchChange(e.target.value)}
+              value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
               className="w-full py-2 pl-10 pr-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500" />
           </div>
           {hasActiveFilters && (
@@ -246,7 +251,7 @@ export const ProvidersPage = () => {
                       <td className="px-6 py-4 text-sm whitespace-nowrap">
                         {provider.department?.name
                           ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">{provider.department.name}</span>
-                          : <span className="text-xs text-gray-400 italic">Sin asignar</span>}
+                          : <span className="text-xs italic text-gray-400">Sin asignar</span>}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(provider.status)}</td>
                       <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">{provider.city || 'N/A'}</td>

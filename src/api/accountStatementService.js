@@ -121,6 +121,87 @@ export const accountStatementService = {
     });
     triggerBlobDownload(response, `reporte-cuentas-${Date.now()}.xlsx`);
     },
+
+    syncProviderNow: async (providerId) => {
+        const response = await api.post(`/finance/providers/${providerId}/sync-now`);
+        return response.data;
+        },
+
+    // ── Facturas subidas por el proveedor ──
+getMyInvoiceSubmissions: async () => {
+  const response = await api.get('/provider/invoice-submissions');
+  return response.data;
+},
+
+submitInvoice: async (pdf, xml) => {
+  const formData = new FormData();
+  formData.append('pdf', pdf);
+  formData.append('xml', xml);
+  const response = await api.post('/provider/invoice-submissions', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data;
+},
+
+downloadMySubmissionFile: async (id, kind, fallbackName = 'documento') => {
+  const response = await api.get(`/provider/invoice-submissions/${id}/file/${kind}`, { responseType: 'blob' });
+  triggerBlobDownload(response, fallbackName);
+},
+
+// ── Cuentas por Pagar / Finanzas ──
+getInvoiceSubmissions: async (params = {}) => {
+  const response = await api.get('/finance/invoice-submissions', { params });
+  return response.data;
+},
+
+reviewInvoiceSubmission: async (id, data) => {
+  const response = await api.patch(`/finance/invoice-submissions/${id}/review`, data);
+  return response.data;
+},
+
+downloadSubmissionFile: async (id, kind, fallbackName = 'documento') => {
+  const response = await api.get(`/finance/invoice-submissions/${id}/file/${kind}`, { responseType: 'blob' });
+  triggerBlobDownload(response, fallbackName);
+},    
+
+// ── Complementos de pago del proveedor ──
+getMyPaymentComplements: async () => {
+  const response = await api.get('/provider/payment-complements');
+  return response.data;
+},
+
+submitPaymentComplement: async (paymentId, pdf, xml) => {
+  const formData = new FormData();
+  formData.append('netsuite_vendor_payment_id', paymentId);
+  formData.append('pdf', pdf);
+  formData.append('xml', xml);
+  const response = await api.post('/provider/payment-complements', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data;
+},
+
+downloadMyComplementFile: async (id, kind, fallbackName = 'documento') => {
+  const response = await api.get(`/provider/payment-complements/${id}/file/${kind}`, { responseType: 'blob' });
+  triggerBlobDownload(response, fallbackName);
+},
+
+// ── Cuentas por Pagar / Finanzas ──
+getPaymentComplements: async (params = {}) => {
+  const response = await api.get('/finance/payment-complements', { params });
+  return response.data;
+},
+
+reviewPaymentComplement: async (id, data) => {
+  const response = await api.patch(`/finance/payment-complements/${id}/review`, data);
+  return response.data;
+},
+
+downloadComplementFile: async (id, kind, fallbackName = 'documento') => {
+  const response = await api.get(`/finance/payment-complements/${id}/file/${kind}`, { responseType: 'blob' });
+  triggerBlobDownload(response, fallbackName);
+},
+
 };
 
 /**

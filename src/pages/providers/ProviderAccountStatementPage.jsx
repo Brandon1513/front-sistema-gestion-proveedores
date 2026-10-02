@@ -7,10 +7,12 @@ import { Button } from '../../components/common/Button';
 import {
   FileText, Receipt, CreditCard, Download,
   Clock, CheckCircle, XCircle, AlertCircle, Send, Search, X, AlertTriangle,
-  ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, FileSpreadsheet,
+  ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, FileSpreadsheet, FileUp, ExternalLink,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const TABS = [
+  { id: 'my_submissions', label: 'Mis Facturas', icon: FileUp },
   { id: 'invoices', label: 'Facturas', icon: FileText },
   { id: 'payments', label: 'Comprobantes de Pago', icon: CreditCard },
   { id: 'credit_memos', label: 'Notas de Crédito', icon: Receipt },
@@ -21,6 +23,17 @@ const TYPE_LABELS = {
   faltante: 'Faltante',
   devolucion: 'Devolución',
   rechazo: 'Rechazo',
+};
+
+// Facturas/pagos anteriores a esta fecha vienen del histórico que trajimos
+// de NetSuite al construir el módulo — nunca pasaron por el flujo de SGP,
+// así que no tiene sentido pedirle al proveedor su complemento.
+const COMPLEMENT_REQUIRED_SINCE_FALLBACK = '2026-06-01';
+
+const SUBMISSION_STATUS_INFO = {
+  submitted: { label: 'Recibida', variant: 'pending', icon: Clock },
+  captured: { label: 'Capturada en NetSuite', variant: 'success', icon: CheckCircle },
+  rejected: { label: 'Rechazada', variant: 'rejected', icon: XCircle },
 };
 
 const INVOICE_STATUS_OPTIONS = [
@@ -75,18 +88,42 @@ export const ProviderAccountStatementPage = () => {
   const [amountMin, setAmountMin] = useState('');
   const [amountMax, setAmountMax] = useState('');
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState('');
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadingComplementFor, setUploadingComplementFor] = useState(null); // el pago seleccionado
 
+  const { data: myComplements } = useQuery({
+    queryKey: ['my-payment-complements'],
+    queryFn: accountStatementService.getMyPaymentComplements,
+  });
+
+  const complementByPaymentId = useMemo(() => {
+    const map = {};
+    (myComplements?.complements || []).forEach((c) => {
+      map[c.netsuite_vendor_payment_id] = c;
+    });
+    return map;
+  }, [myComplements]);
+
+  const { data: mySubmissions, isLoading: submissionsLoading } = useQuery({
+    queryKey: ['my-invoice-submissions'],
+    queryFn: accountStatementService.getMyInvoiceSubmissions,
+    enabled: activeTab === 'my_submissions',
+  });
+
+  const handleDownloadSubmissionFile = async (id, kind, folio) => {
+    await accountStatementService.downloadMySubmissionFile(id, kind, `factura-${folio || id}`);
+  };
 
   const handleExportExcel = async () => {
-  setExportingExcel(true);
-  try {
-    await accountStatementService.exportMyAccountStatement();
-  } catch (err) {
-    alert('No se pudo generar el archivo. Intenta de nuevo.');
-  } finally {
-    setExportingExcel(false);
-  }
-};
+    setExportingExcel(true);
+    try {
+      await accountStatementService.exportMyAccountStatement();
+    } catch (err) {
+      alert('No se pudo generar el archivo. Intenta de nuevo.');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['provider-account-statement'],
@@ -202,6 +239,17 @@ export const ProviderAccountStatementPage = () => {
     else alert('No se encontró una factura relacionada.');
   };
 
+  // focusedFolio debe declararse ANTES de cualquier `return` condicional
+  // (como el de isLoading de abajo) para que el orden de Hooks nunca cambie
+  // entre renders.
+  const focusedFolio = useMemo(() => {
+    if (!focusFilter) return null;
+    if (focusFilter.tab === 'invoices') return data?.invoices?.find((i) => i.id === focusFilter.id)?.tran_id;
+    if (focusFilter.tab === 'payments') return data?.payments?.find((p) => p.id === focusFilter.id)?.tran_id;
+    if (focusFilter.tab === 'credit_memos') return data?.credit_memos?.find((c) => c.id === focusFilter.id)?.tran_id;
+    return null;
+  }, [focusFilter, data]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -274,6 +322,49 @@ export const ProviderAccountStatementPage = () => {
           Ver factura
         </button>
       ) },
+      { key: 'complement', label: 'Complemento de Pago', sortable: false,
+  render: (r) => {
+    const complement = complementByPaymentId[r.id];
+    const appliesToPayment = r.tran_date && r.tran_date >= (data?.complement_required_since || COMPLEMENT_REQUIRED_SINCE_FALLBACK);
+
+    if (!appliesToPayment && !complement) {
+      return <span className="text-xs italic text-gray-400">No aplica</span>;
+    }
+
+    if (!complement) {
+      return (
+        <button
+          onClick={() => setUploadingComplementFor(r)}
+          className="px-3 py-1.5 text-xs font-semibold rounded-lg text-primary-700 bg-primary-50 hover:bg-primary-100"
+        >
+          Subir complemento
+        </button>
+      );
+    }
+    const statusMap = {
+      submitted: { label: 'En revisión', variant: 'pending', icon: Clock },
+      approved: { label: 'Validado', variant: 'success', icon: CheckCircle },
+      rejected: { label: 'Rechazado', variant: 'rejected', icon: XCircle },
+    };
+    const info = statusMap[complement.status] || statusMap.submitted;
+    const StatusIcon = info.icon;
+    return (
+      <div className="flex items-center gap-2">
+        <Badge variant={info.variant}>
+          <StatusIcon className="inline w-3 h-3 mr-1" />
+          {info.label}
+        </Badge>
+        {complement.status === 'rejected' && (
+          <button
+            onClick={() => setUploadingComplementFor(r)}
+            className="text-xs font-semibold text-primary-600 hover:underline"
+          >
+            Volver a subir
+          </button>
+        )}
+      </div>
+    );
+  } },
   ];
 
   const creditMemoColumns = [
@@ -347,37 +438,40 @@ export const ProviderAccountStatementPage = () => {
       ) },
   ];
 
-  const focusedFolio = useMemo(() => {
-    if (!focusFilter) return null;
-    if (focusFilter.tab === 'invoices') return data?.invoices?.find((i) => i.id === focusFilter.id)?.tran_id;
-    if (focusFilter.tab === 'payments') return data?.payments?.find((p) => p.id === focusFilter.id)?.tran_id;
-    if (focusFilter.tab === 'credit_memos') return data?.credit_memos?.find((c) => c.id === focusFilter.id)?.tran_id;
-    return null;
-  }, [focusFilter, data]);
-
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Estado de Cuenta</h1>
-        <p className="text-sm text-gray-600">Consulta tus facturas, pagos y notas de crédito</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Estado de Cuenta</h1>
+          <p className="text-sm text-gray-600">Consulta tus facturas, pagos y notas de crédito</p>
+        </div>
+        {activeTab === 'my_submissions' && (
+          <Button onClick={() => setShowUploadModal(true)}>
+            <FileUp className="w-4 h-4 mr-2" />
+            Subir factura
+          </Button>
+        )}
       </div>
-      <button
-            onClick={handleExportExcel}
-            disabled={exportingExcel}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl bg-gradient-primary hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-            {exportingExcel ? (
-                <>
-                <div className="w-4 h-4 border-2 border-white rounded-full border-t-transparent animate-spin" />
-                Generando...
-                </>
-            ) : (
-                <>
-                <FileSpreadsheet className="w-4 h-4" />
-                Exportar a Excel
-                </>
-            )}
-      </button>
+
+      {activeTab !== 'my_submissions' && (
+        <button
+          onClick={handleExportExcel}
+          disabled={exportingExcel}
+          className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl bg-gradient-primary hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {exportingExcel ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white rounded-full border-t-transparent animate-spin" />
+              Generando...
+            </>
+          ) : (
+            <>
+              <FileSpreadsheet className="w-4 h-4" />
+              Exportar a Excel
+            </>
+          )}
+        </button>
+      )}
 
       {/* Resumen */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -438,7 +532,7 @@ export const ProviderAccountStatementPage = () => {
       )}
 
       {/* Barra de filtros */}
-      {activeTab !== 'credit_note_requests' && !(focusFilter?.tab === activeTab) && (
+      {activeTab !== 'credit_note_requests' && activeTab !== 'my_submissions' && !(focusFilter?.tab === activeTab) && (
         <div className="flex flex-wrap items-end gap-3 p-4 bg-white border border-gray-200 rounded-2xl">
           <div className="flex-1 min-w-[180px]">
             <label className="block mb-1.5 text-xs font-semibold text-gray-500 uppercase">Buscar folio</label>
@@ -529,6 +623,72 @@ export const ProviderAccountStatementPage = () => {
 
       {/* Contenido */}
       <div className="overflow-hidden bg-white border border-gray-200 rounded-2xl">
+        {activeTab === 'my_submissions' && (
+          submissionsLoading ? <LoadingSpinner /> : (
+            <Table
+              columns={[
+                { key: 'folio', label: 'Folio', sortable: false,
+                  render: (r) => <span className="text-sm font-medium text-gray-900">{[r.serie, r.folio].filter(Boolean).join(' ') || '—'}</span> },
+                { key: 'issued_at', label: 'Fecha', sortable: false,
+                  render: (r) => <span className="text-sm text-gray-600">{formatDate(r.issued_at)}</span> },
+                { key: 'total', label: 'Monto', sortable: false,
+                  render: (r) => <span className="text-sm font-semibold text-gray-900">{formatMoney(r.total)}</span> },
+                { key: 'payment_method', label: 'Método de pago', sortable: false,
+                  render: (r) => <span className="text-sm text-gray-600">{r.payment_method === 'PPD' ? 'PPD' : r.payment_method === 'PUE' ? 'PUE' : '—'}</span> },
+                { key: 'status', label: 'Status', sortable: false,
+                  render: (r) => {
+                    const info = SUBMISSION_STATUS_INFO[r.status] || SUBMISSION_STATUS_INFO.submitted;
+                    const StatusIcon = info.icon;
+                    return (
+                      <Badge variant={info.variant}>
+                        <StatusIcon className="inline w-3 h-3 mr-1" />
+                        {info.label}
+                      </Badge>
+                    );
+                  } },
+                { key: 'files', label: 'Archivos', sortable: false,
+                  render: (r) => (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleDownloadSubmissionFile(r.id, 'pdf', r.folio)}
+                        className="text-primary-600 hover:text-primary-800"
+                        title="Descargar PDF"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                      <span className="text-xs text-gray-300">|</span>
+                      <button
+                        onClick={() => handleDownloadSubmissionFile(r.id, 'xml', r.folio)}
+                        className="text-xs font-semibold text-primary-600 hover:underline"
+                      >
+                        XML
+                      </button>
+                    </div>
+                  ) },
+                  { key: 'view_in_netsuite', label: '', sortable: false,
+                    render: (r) => {
+                      if (r.status !== 'captured' || !r.netsuite_vendor_invoice_id) return null;
+                      return (
+                        <button
+                          onClick={() => goToInvoice({ id: r.netsuite_vendor_invoice_id })}
+                          className="flex items-center gap-1 text-xs font-semibold text-primary-600 hover:underline"
+                        >
+                          Ver en Facturas
+                          <ExternalLink className="w-3 h-3" />
+                        </button>
+                      );
+                    } },
+                { key: 'notes', label: 'Notas', sortable: false,
+                  render: (r) => r.review_notes ? (
+                    <span className="text-xs text-red-600" title={r.review_notes}>{r.review_notes.slice(0, 40)}{r.review_notes.length > 40 ? '…' : ''}</span>
+                  ) : '—' },
+              ]}
+              rows={mySubmissions?.submissions}
+              empty="Aún no has subido ninguna factura"
+            />
+          )
+        )}
+
         {activeTab === 'invoices' && (
           <Table
             columns={invoiceColumns}
@@ -575,6 +735,15 @@ export const ProviderAccountStatementPage = () => {
       {respondingTo && (
         <RespondModal request={respondingTo} onClose={() => setRespondingTo(null)} />
       )}
+      {showUploadModal && (
+        <UploadInvoiceModal onClose={() => setShowUploadModal(false)} />
+      )}
+      {uploadingComplementFor && (
+        <UploadComplementModal
+          payment={uploadingComplementFor}
+          onClose={() => setUploadingComplementFor(null)}
+        />
+      )}
     </div>
   );
 };
@@ -589,6 +758,8 @@ const InvoiceTimelineContent = ({ invoiceId, fetchTimeline, onNavigate }) => {
     return <div className="py-6 text-sm text-center text-gray-400">Cargando historial...</div>;
   }
 
+  const block = data?.payment_block;
+
   const events = [
     ...(data?.applied_payments || []).map((p) => ({
       type: 'payment', date: p.tran_date, label: `Pago ${p.tran_id}`, amount: p.amount, id: p.id,
@@ -598,38 +769,51 @@ const InvoiceTimelineContent = ({ invoiceId, fetchTimeline, onNavigate }) => {
     })),
   ].sort((a, b) => new Date(a.date) - new Date(b.date));
 
-  if (events.length === 0) {
-    return <div className="py-6 text-sm text-center text-gray-400">Sin pagos ni notas de crédito aplicados a esta factura todavía</div>;
-  }
-
   return (
     <div className="py-3">
-      <p className="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase">Historial de aplicaciones</p>
-      <div className="space-y-0">
-        {events.map((ev, idx) => (
-          <div
-            key={`${ev.type}-${ev.id}`}
-            className="flex items-start gap-3 px-2 py-1 -mx-2 rounded-lg cursor-pointer hover:bg-gray-100"
-            onClick={() => onNavigate(ev.type === 'payment' ? 'payments' : 'credit_memos', ev.id)}
-          >
-            <div className="flex flex-col items-center">
-              <div className={`flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 ${
-                ev.type === 'payment' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'
-              }`}>
-                {ev.type === 'payment' ? <CreditCard className="w-4 h-4" /> : <Receipt className="w-4 h-4" />}
+      {block?.blocked && (
+        <div className="p-3 mb-4 text-sm border rounded-xl text-amber-800 border-amber-200 bg-amber-50">
+          <p className="font-semibold">⚠️ Se detiene el pago de la factura porque tiene registros pendientes</p>
+          <ul className="mt-1.5 ml-4 list-disc">
+            {block.reasons.map((reason, i) => (
+              <li key={i}>{reason}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {events.length === 0 ? (
+        <div className="py-6 text-sm text-center text-gray-400">Sin pagos ni notas de crédito aplicados a esta factura todavía</div>
+      ) : (
+        <>
+          <p className="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase">Historial de aplicaciones</p>
+          <div className="space-y-0">
+            {events.map((ev, idx) => (
+              <div
+                key={`${ev.type}-${ev.id}`}
+                className="flex items-start gap-3 px-2 py-1 -mx-2 rounded-lg cursor-pointer hover:bg-gray-100"
+                onClick={() => onNavigate(ev.type === 'payment' ? 'payments' : 'credit_memos', ev.id)}
+              >
+                <div className="flex flex-col items-center">
+                  <div className={`flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 ${
+                    ev.type === 'payment' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'
+                  }`}>
+                    {ev.type === 'payment' ? <CreditCard className="w-4 h-4" /> : <Receipt className="w-4 h-4" />}
+                  </div>
+                  {idx < events.length - 1 && <div className="w-px flex-1 bg-gray-200 my-1 min-h-[16px]" />}
+                </div>
+                <div className="flex-1 pb-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-gray-900 hover:underline">{ev.label}</p>
+                    <p className="text-sm font-semibold text-gray-900">{formatMoney(ev.amount)}</p>
+                  </div>
+                  <p className="text-xs text-gray-500">{formatDate(ev.date)}</p>
+                </div>
               </div>
-              {idx < events.length - 1 && <div className="w-px flex-1 bg-gray-200 my-1 min-h-[16px]" />}
-            </div>
-            <div className="flex-1 pb-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-gray-900 hover:underline">{ev.label}</p>
-                <p className="text-sm font-semibold text-gray-900">{formatMoney(ev.amount)}</p>
-              </div>
-              <p className="text-xs text-gray-500">{formatDate(ev.date)}</p>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
     </div>
   );
 };
@@ -699,6 +883,153 @@ const RespondModal = ({ request, onClose }) => {
   );
 };
 
+const UploadInvoiceModal = ({ onClose }) => {
+  const queryClient = useQueryClient();
+  const [pdf, setPdf] = useState(null);
+  const [xml, setXml] = useState(null);
+  const [error, setError] = useState(null);
+
+  const mutation = useMutation({
+  mutationFn: () => accountStatementService.submitInvoice(pdf, xml),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['my-invoice-submissions'] });
+    toast.success('Factura subida correctamente');
+    onClose();
+  },
+  onError: (err) => {
+    const data = err.response?.data;
+    const message = data?.message || 'Error al subir la factura';
+    setError(message);
+    toast.error(message);
+  },
+});
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setError(null);
+    if (!pdf || !xml) {
+      setError('Selecciona el PDF y el XML de la factura');
+      return;
+    }
+    mutation.mutate();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+      <div className="w-full max-w-md p-6 bg-white shadow-elevated rounded-2xl">
+        <h2 className="mb-1 text-lg font-bold text-gray-900">Subir factura</h2>
+        <p className="mb-4 text-sm text-gray-500">Sube el PDF y el XML (CFDI) de tu factura</p>
+
+        {error && (
+          <div className="p-3 mb-4 text-sm text-red-600 border border-red-200 bg-red-50 rounded-xl">{error}</div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block mb-1.5 text-sm font-medium text-gray-700">Archivo PDF</label>
+            <input
+              type="file" accept=".pdf"
+              onChange={(e) => setPdf(e.target.files[0])}
+              className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-primary-50 file:text-primary-700 file:text-sm file:font-semibold"
+            />
+          </div>
+
+          <div>
+            <label className="block mb-1.5 text-sm font-medium text-gray-700">Archivo XML (CFDI)</label>
+            <input
+              type="file" accept=".xml"
+              onChange={(e) => setXml(e.target.files[0])}
+              className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-primary-50 file:text-primary-700 file:text-sm file:font-semibold"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button type="button" onClick={onClose} className="flex-1 text-gray-700 bg-gray-100 hover:bg-gray-200">
+              Cancelar
+            </Button>
+            <Button type="submit" loading={mutation.isPending} className="flex-1">
+              Subir factura
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const UploadComplementModal = ({ payment, onClose }) => {
+  const queryClient = useQueryClient();
+  const [pdf, setPdf] = useState(null);
+  const [xml, setXml] = useState(null);
+  const [error, setError] = useState(null);
+
+  const mutation = useMutation({
+    mutationFn: () => accountStatementService.submitPaymentComplement(payment.id, pdf, xml),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-payment-complements'] });
+      toast.success('Complemento de pago subido correctamente');
+      onClose();
+    },
+    onError: (err) => {
+      const message = err.response?.data?.message || 'Error al subir el complemento';
+      setError(message);
+      toast.error(message);
+    },
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setError(null);
+    if (!pdf || !xml) {
+      setError('Selecciona el PDF y el XML del complemento de pago');
+      return;
+    }
+    mutation.mutate();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+      <div className="w-full max-w-md p-6 bg-white shadow-elevated rounded-2xl">
+        <h2 className="mb-1 text-lg font-bold text-gray-900">Subir complemento de pago</h2>
+        <p className="mb-4 text-sm text-gray-500">Pago {payment.tran_id} — {formatMoney(payment.amount)}</p>
+
+        {error && (
+          <div className="p-3 mb-4 text-sm text-red-600 border border-red-200 bg-red-50 rounded-xl">{error}</div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block mb-1.5 text-sm font-medium text-gray-700">Archivo PDF</label>
+            <input
+              type="file" accept=".pdf"
+              onChange={(e) => setPdf(e.target.files[0])}
+              className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-primary-50 file:text-primary-700 file:text-sm file:font-semibold"
+            />
+          </div>
+
+          <div>
+            <label className="block mb-1.5 text-sm font-medium text-gray-700">Archivo XML (CFDI de Pago)</label>
+            <input
+              type="file" accept=".xml"
+              onChange={(e) => setXml(e.target.files[0])}
+              className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-primary-50 file:text-primary-700 file:text-sm file:font-semibold"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button type="button" onClick={onClose} className="flex-1 text-gray-700 bg-gray-100 hover:bg-gray-200">
+              Cancelar
+            </Button>
+            <Button type="submit" loading={mutation.isPending} className="flex-1">
+              Subir complemento
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 const DownloadButton = ({ onClick, loading }) => (
   <button
     onClick={(e) => { e.stopPropagation(); onClick(); }}
@@ -712,6 +1043,12 @@ const DownloadButton = ({ onClick, loading }) => (
       <Download className="w-4 h-4" />
     )}
   </button>
+);
+
+const LoadingSpinner = () => (
+  <div className="flex items-center justify-center py-20">
+    <div className="w-8 h-8 border-4 rounded-full border-primary-200 border-t-primary-600 animate-spin" />
+  </div>
 );
 
 const Table = ({

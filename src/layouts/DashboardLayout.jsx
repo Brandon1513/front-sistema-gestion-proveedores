@@ -55,14 +55,16 @@ export const DashboardLayout = () => {
     }
   };
 
-  const getUserRole = () => {
-    if (user?.role) return user.role;
+    const getUserRoles = () => {
     if (user?.roles && Array.isArray(user.roles) && user.roles.length > 0)
-      return user.roles[0]?.name || user.roles[0];
-    return null;
+      return user.roles.map((r) => r?.name || r);
+    if (user?.role) return [user.role];
+    return [];
   };
-  const userRole = getUserRole();
-  const canValidate = ['super_admin', 'admin', 'calidad'].includes(userRole?.toLowerCase());
+  const userRoles = getUserRoles();
+  const normalizedUserRoles = userRoles.map((r) => r?.toLowerCase());
+  const userRole = userRoles[0] || null; // rol "principal" solo para mostrar en la tarjeta de perfil
+  const canValidate = normalizedUserRoles.some((r) => ['super_admin', 'admin', 'calidad'].includes(r));
 
   const { data: pendingCount = 0 } = useQuery({
     queryKey: ['pending-badge'],
@@ -111,18 +113,19 @@ export const DashboardLayout = () => {
 
   const navigation = [
     { name: 'Dashboard',              href: '/dashboard',            icon: LayoutDashboard, roles: ['super_admin','admin','calidad','compras'] },
-    { name: 'Proveedores',            href: '/providers',            icon: Users,           roles: ['super_admin','admin','calidad','compras','ingeniero_alimentos'] },
-    { name: 'Documentos',             href: '/documents',            icon: FileText,        roles: ['super_admin','admin','calidad'] },
-    { name: 'Estado Documental',      href: '/documents/status',     icon: FileText,        roles: ['compras'] },
-    { name: 'Validar Documentos',     href: '/documents/validation', icon: CheckSquare,     roles: ['super_admin','admin','calidad'] },
+    { name: 'Proveedores',            href: '/providers',            icon: Users,           roles: ['super_admin','admin','calidad','compras','ingeniero_alimentos','cuentas_por_pagar'] },
+    { name: 'Documentos',             href: '/documents',            icon: FileText,        roles: ['super_admin','admin','calidad','cuentas_por_pagar','ingeniero_alimentos'] },
+    { name: 'Estado Documental',      href: '/documents/status',     icon: FileText,        roles: ['compras','cuentas_por_pagar', 'ingeniero_alimentos'] },
+    { name: 'Validar Documentos',     href: '/documents/validation', icon: CheckSquare,     roles: ['super_admin','admin','calidad','cuentas_por_pagar', 'ingeniero_alimentos'] },
     { name: 'Estadísticas de Calidad',href: '/quality/dashboard',    icon: BarChart3,       roles: ['super_admin','admin','calidad'] },
     { name: 'Invitaciones',           href: '/invitations',          icon: Send,            roles: ['super_admin','admin','compras'] },
     { name: 'Calendario de Citas',    href: '/appointments',         icon: CalendarDays,    roles: ['super_admin','admin','compras'] },
     { name: 'Control de Acceso',      href: '/security/calendar',    icon: Shield,          roles: ['super_admin','admin','seguridad'] },
     { name: 'Recepción de Productos', href: '/food-engineer',        icon: FlaskConical,    roles: ['super_admin','admin','ingeniero_alimentos'] },
-    { name: 'Reportes',               href: '/reports',              icon: FileSpreadsheet, roles: ['super_admin','admin','calidad','compras','ingeniero_alimentos'] },
+    { name: 'Reportes',               href: '/reports',              icon: FileSpreadsheet, roles: ['super_admin','admin','calidad','compras','ingeniero_alimentos','cuentas_por_pagar'] },
     { name: 'User Management',        href: '/admin/users',          icon: Users,           roles: ['super_admin','admin'] },
-    { name: 'Estado de Cuenta',       href: '/finance/account-statement', icon: Wallet, roles: ['super_admin','admin','compras','finanzas'] },
+    { name: 'Estado de Cuenta', href: '/finance/account-statement', icon: Wallet, roles: ['super_admin','admin','compras','finanzas','cuentas_por_pagar','ingeniero_alimentos'] },
+    
   ];
 
   const settingsChildren = [
@@ -140,10 +143,11 @@ export const DashboardLayout = () => {
       roles: ['super_admin','admin','compras'] },
   ];
 
-  const hasAccess = (itemRoles) => {
+    const hasAccess = (itemRoles) => {
     if (!itemRoles || itemRoles.length === 0) return true;
-    if (!userRole) return false;
-    return itemRoles.map(r => r.toLowerCase()).includes(userRole.toLowerCase());
+    if (normalizedUserRoles.length === 0) return false;
+    const normalizedItemRoles = itemRoles.map(r => r.toLowerCase());
+    return normalizedUserRoles.some((r) => normalizedItemRoles.includes(r));
   };
 
   const visibleNavigation            = navigation.filter(item => hasAccess(item.roles));
@@ -162,6 +166,8 @@ export const DashboardLayout = () => {
     'admin':       'bg-gradient-to-br from-purple-500 to-purple-600',
     'calidad':     'bg-gradient-to-br from-amber-500 to-amber-600',
     'compras':     'bg-gradient-to-br from-rose-500 to-rose-600',
+    'finanzas':    'bg-gradient-to-br from-green-500 to-green-600',
+    'cuentas_por_pagar': 'bg-gradient-to-br from-blue-500 to-blue-600',
     'proveedor':   'bg-gradient-to-br from-gray-500 to-gray-600',
   };
   const getRoleColor = () => roleColors[userRole?.toLowerCase()] || 'bg-gradient-to-br from-gray-500 to-gray-600';
