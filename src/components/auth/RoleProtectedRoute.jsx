@@ -2,12 +2,20 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 
-// Home de cada rol — agrega aquí si se crean más roles
-const getHomeByRole = (role) => {
-  const r = role?.toLowerCase();
-  if (r === 'proveedor')           return '/provider/dashboard';
-  if (r === 'seguridad')           return '/security/calendar';
-  if (r === 'ingeniero_alimentos') return '/food-engineer';
+// Orden de prioridad para decidir el "home" cuando un usuario tiene
+// varios roles — los roles con una vista muy específica y aislada van
+// primero; el resto cae al Dashboard general.
+const HOME_PRIORITY = [
+  { role: 'proveedor',       path: '/provider/dashboard' },
+  { role: 'seguridad',       path: '/security/calendar' },
+  { role: 'emp_solicitante', path: '/my-requests' },
+];
+
+const getHomeByRoles = (roleNames = []) => {
+  const lower = roleNames.map((r) => r?.toLowerCase());
+  for (const { role, path } of HOME_PRIORITY) {
+    if (lower.includes(role)) return path;
+  }
   return '/dashboard';
 };
 
@@ -20,21 +28,22 @@ export const RoleProtectedRoute = ({ children, allowedRoles = [] }) => {
   // Sin restricción de roles → permitir
   if (allowedRoles.length === 0) return children;
 
-  // Obtener el rol del usuario
-  const getUserRole = () => {
-    if (user?.role) return user.role;
+  // Todos los roles del usuario (puede tener varios)
+  const getUserRoles = () => {
     if (user?.roles && Array.isArray(user.roles) && user.roles.length > 0) {
-      return user.roles[0]?.name || user.roles[0];
+      return user.roles.map((r) => r?.name || r);
     }
-    return null;
+    if (user?.role) return [user.role];
+    return [];
   };
 
-  const userRole   = getUserRole();
-  const normalized = userRole?.toLowerCase();
-  const hasAccess  = allowedRoles.map(r => r.toLowerCase()).includes(normalized);
+  const userRoles        = getUserRoles();
+  const normalizedUser   = userRoles.map((r) => r?.toLowerCase());
+  const normalizedAllow  = allowedRoles.map((r) => r.toLowerCase());
+  const hasAccess         = normalizedUser.some((r) => normalizedAllow.includes(r));
 
   // Sin acceso → redirigir a su home, nunca mostrar error
-  if (!hasAccess) return <Navigate to={getHomeByRole(userRole)} replace />;
+  if (!hasAccess) return <Navigate to={getHomeByRoles(userRoles)} replace />;
 
   return children;
 };

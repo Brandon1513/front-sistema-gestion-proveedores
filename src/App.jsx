@@ -57,8 +57,7 @@ const PublicRoute = ({ children }) => {
     const roleNames = (user?.roles || []).map(r => r?.name || r);
     if (roleNames.includes('proveedor'))           return <Navigate to="/provider/dashboard" replace />;
     if (roleNames.includes('seguridad'))           return <Navigate to="/security/calendar" replace />;
-    if (roleNames.includes('ingeniero_alimentos')) return <Navigate to="/food-engineer" replace />;
-    if (roleNames.includes('emp_solicitante'))     return <Navigate to="/my-requests" replace />; 
+    if (roleNames.includes('emp_solicitante'))     return <Navigate to="/my-requests" replace />;
     return <Navigate to="/dashboard" replace />;
   }
   return children;
@@ -87,7 +86,7 @@ function App() {
             <Route index element={<SmartRedirect />} />
 
             <Route path="dashboard" element={
-              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','compras']}>
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','compras','finanzas','cuentas_por_pagar','ingeniero_alimentos']}>
                 <DashboardPage />
               </RoleProtectedRoute>
             } />
@@ -127,18 +126,18 @@ function App() {
               </RoleProtectedRoute>
             } />
             <Route path="finance/account-statement" element={
-              <RoleProtectedRoute allowedRoles={['super_admin','admin','compras','finanzas']}>
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','compras','finanzas','cuentas_por_pagar','ingeniero_alimentos']}>
                 <FinanceAccountStatementPage />
               </RoleProtectedRoute>
             } />
             
             <Route path="providers" element={
-              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','compras','ingeniero_alimentos']}>
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','compras','ingeniero_alimentos','cuentas_por_pagar']}>
                 <ProvidersPage />
               </RoleProtectedRoute>
             } />
             <Route path="providers/:id" element={
-              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','compras','ingeniero_alimentos']}>
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','compras','ingeniero_alimentos','cuentas_por_pagar']}>
                 <ProviderDetailPage />
               </RoleProtectedRoute>
             } />
@@ -146,17 +145,17 @@ function App() {
             <Route path="providers/:id/edit" element={<ProviderFormPage />} />
 
             <Route path="documents" element={
-              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad']}>
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','cuentas_por_pagar']}>
                 <DocumentsPage />
               </RoleProtectedRoute>
             } />
             <Route path="documents/status" element={
-              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','compras']}>
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','compras','cuentas_por_pagar']}>
                 <DocumentStatusPage />
               </RoleProtectedRoute>
             } />
             <Route path="documents/validation" element={
-              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad']}>
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','cuentas_por_pagar']}>
                 <DocumentValidationPage />
               </RoleProtectedRoute>
             } />

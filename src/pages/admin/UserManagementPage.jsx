@@ -47,7 +47,7 @@ const Pagination = ({ meta, onPageChange }) => {
         <button
           onClick={() => onPageChange(current_page - 1)}
           disabled={current_page === 1}
-          className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-2 text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
@@ -80,7 +80,7 @@ const Pagination = ({ meta, onPageChange }) => {
         <button
           onClick={() => onPageChange(current_page + 1)}
           disabled={current_page === last_page}
-          className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-2 text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
@@ -208,12 +208,14 @@ const InternalUsersTab = () => {
     onSuccess: () => queryClient.invalidateQueries(['users']),
   });
 
-  const isCurrentUser  = (user) => user.id === currentUser?.id;
+      const isCurrentUser  = (user) => user.id === currentUser?.id;
   const getRoleBadgeVariant = (r) => ({
   super_admin: 'rejected',
   admin: 'pending',
   compras: 'info',
   calidad: 'active',
+  finanzas: 'success',
+  cuentas_por_pagar: 'warning',
   seguridad: 'warning',           
   ingeniero_alimentos: 'success', 
   emp_solicitante: 'info',        
@@ -224,6 +226,8 @@ const getRoleLabel = (r) => ({
   admin: 'Administrador',
   compras: 'Compras',
   calidad: 'Calidad',
+  finanzas: 'Finanzas',
+  cuentas_por_pagar: 'Cuentas por Pagar',
   seguridad: 'Seguridad',              
   ingeniero_alimentos: 'Ing. Alimentos', 
   emp_solicitante: 'Solicitante',        
@@ -260,13 +264,15 @@ const getRoleLabel = (r) => ({
               className="w-full py-2 pr-4 text-sm border border-gray-300 rounded-lg pl-9 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
-          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
+            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500">
             <option value="">Todos los roles</option>
             <option value="super_admin">Super Admin</option>
             <option value="admin">Administrador</option>
             <option value="compras">Compras</option>
             <option value="calidad">Calidad</option>
+            <option value="finanzas">Finanzas</option>
+            <option value="cuentas_por_pagar">Cuentas por Pagar</option>
             <option value="seguridad">Seguridad</option>             
             <option value="ingeniero_alimentos">Ingeniero de Alimentos</option>
             <option value="emp_solicitante">Solicitante de Alta</option>       
@@ -318,9 +324,15 @@ const getRoleLabel = (r) => ({
                         <p className="text-sm text-gray-500">{user.email}</p>
                       </td>
                       <td className="px-6 py-4">
-                        <Badge variant={getRoleBadgeVariant(user.roles[0]?.name)}>
-                          {getRoleLabel(user.roles[0]?.name)}
-                        </Badge>
+                        <div className="flex flex-wrap gap-1.5">
+                          {user.roles.length > 0 ? user.roles.map((r) => (
+                            <Badge key={r.name} variant={getRoleBadgeVariant(r.name)}>
+                              {getRoleLabel(r.name)}
+                            </Badge>
+                          )) : (
+                            <span className="text-xs italic text-gray-400">Sin rol</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">

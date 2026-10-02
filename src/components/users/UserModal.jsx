@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { userService } from '../../api/userService';
 import { Button } from '../common/Button';
 import { Input } from '../common/Input';
-import { X, Save, UserPlus } from 'lucide-react';
+import { X, Save, UserPlus, AlertCircle } from 'lucide-react';
 
 export const UserModal = ({ isOpen, onClose, user, isEditing }) => {
   const queryClient = useQueryClient();
@@ -12,7 +12,7 @@ export const UserModal = ({ isOpen, onClose, user, isEditing }) => {
     email: '',
     password: '',
     password_confirmation: '',
-    role: 'compras',
+    roles: [],
     is_active: true,
   });
   const [errors, setErrors] = useState({});
@@ -34,7 +34,7 @@ export const UserModal = ({ isOpen, onClose, user, isEditing }) => {
         email: user.email || '',
         password: '',
         password_confirmation: '',
-        role: user.roles[0]?.name || 'compras',
+        roles: (user.roles || []).map((r) => r.name),
         is_active: user.is_active ?? true,
       });
     } else {
@@ -43,7 +43,7 @@ export const UserModal = ({ isOpen, onClose, user, isEditing }) => {
         email: '',
         password: '',
         password_confirmation: '',
-        role: 'compras',
+        roles: [],
         is_active: true,
       });
     }
@@ -78,23 +78,26 @@ export const UserModal = ({ isOpen, onClose, user, isEditing }) => {
     },
   });
 
-  // ✅ CORREGIDO: Usar isPending en lugar de isLoading
   const isLoading = createMutation.isPending || updateMutation.isPending;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Prevenir envíos múltiples
+
     if (isLoading) return;
-    
+
     setErrors({});
+
+    if (formData.roles.length === 0) {
+      setErrors({ roles: ['Selecciona al menos un rol'] });
+      return;
+    }
 
     if (isEditing) {
       // Al editar, no enviar password si está vacío
       const updateData = {
         name: formData.name,
         email: formData.email,
-        role: formData.role,
+        roles: formData.roles,
         is_active: formData.is_active,
       };
       updateMutation.mutate({ id: user.id, data: updateData });
@@ -120,13 +123,25 @@ export const UserModal = ({ isOpen, onClose, user, isEditing }) => {
     });
   };
 
+  const toggleRole = (roleValue) => {
+    setFormData((prev) => {
+      const has = prev.roles.includes(roleValue);
+      return {
+        ...prev,
+        roles: has
+          ? prev.roles.filter((r) => r !== roleValue)
+          : [...prev.roles, roleValue],
+      };
+    });
+    if (errors.roles) setErrors((prev) => ({ ...prev, roles: undefined }));
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
       onClick={(e) => {
-        // Cerrar solo si se hace clic en el overlay (no en el contenido)
         if (e.target === e.currentTarget && !isLoading) {
           onClose();
         }
@@ -216,7 +231,6 @@ export const UserModal = ({ isOpen, onClose, user, isEditing }) => {
                   <p className="mt-1 text-sm text-red-600">{errors.password[0]}</p>
                 )}
               </div>
-
               <div>
                 <label className="block mb-2 text-sm font-semibold text-gray-700">
                   Confirmar contraseña *
@@ -239,27 +253,42 @@ export const UserModal = ({ isOpen, onClose, user, isEditing }) => {
             </>
           )}
 
-          {/* Rol */}
+          {/* Roles — selección múltiple */}
           <div>
             <label className="block mb-2 text-sm font-semibold text-gray-700">
-              Rol *
+              Roles * <span className="font-normal text-gray-400">(selecciona uno o varios)</span>
             </label>
-            <select
-              name="role"
-              value={formData.role}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-              required
-              disabled={isLoading}
-            >
+            <div className="grid grid-cols-1 gap-2 p-3 overflow-y-auto border border-gray-200 rounded-lg sm:grid-cols-2 max-h-56">
               {roles.map((role) => (
-                <option key={role.value} value={role.value}>
+                <label
+                  key={role.value}
+                  className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors border ${
+                    formData.roles.includes(role.value)
+                      ? 'bg-primary-50 border-primary-300 text-primary-700 font-medium'
+                      : 'border-transparent hover:bg-gray-50 text-gray-700'
+                  } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={formData.roles.includes(role.value)}
+                    onChange={() => toggleRole(role.value)}
+                    disabled={isLoading}
+                    className="w-4 h-4 border-gray-300 rounded text-primary-600 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
                   {role.label}
-                </option>
+                </label>
               ))}
-            </select>
-            {errors.role && (
-              <p className="mt-1 text-sm text-red-600">{errors.role[0]}</p>
+            </div>
+            {formData.roles.length > 0 && (
+              <p className="mt-1.5 text-xs text-gray-500">
+                {formData.roles.length} rol{formData.roles.length !== 1 ? 'es' : ''} seleccionado{formData.roles.length !== 1 ? 's' : ''}
+              </p>
+            )}
+            {errors.roles && (
+              <p className="flex items-center gap-1 mt-1.5 text-sm text-red-600">
+                <AlertCircle className="w-3.5 h-3.5" />
+                {errors.roles[0]}
+              </p>
             )}
           </div>
 
@@ -270,7 +299,7 @@ export const UserModal = ({ isOpen, onClose, user, isEditing }) => {
               name="is_active"
               checked={formData.is_active}
               onChange={handleChange}
-              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-4 h-4 border-gray-300 rounded text-primary-600 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={isLoading}
             />
             <div>
@@ -299,7 +328,7 @@ export const UserModal = ({ isOpen, onClose, user, isEditing }) => {
             >
               {isLoading ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white rounded-full border-t-transparent animate-spin" />
                   Guardando...
                 </>
               ) : (
