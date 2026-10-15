@@ -6,6 +6,9 @@ export const ReviewComplementModal = ({ complement, onClose, onSubmit, loading }
   const [status, setStatus] = useState('approved');
   const [notes, setNotes] = useState('');
 
+  const payments = complement.payments || [];
+  const paymentsTotal = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+
   const handleConfirm = () => {
     if (status === 'rejected' && !notes.trim()) {
       alert('Escribe el motivo del rechazo');
@@ -16,15 +19,27 @@ export const ReviewComplementModal = ({ complement, onClose, onSubmit, loading }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="w-full max-w-lg p-6 bg-white shadow-elevated rounded-2xl">
+      <div className="w-full max-w-lg p-6 bg-white shadow-elevated rounded-2xl max-h-[90vh] overflow-y-auto">
         <h2 className="mb-1 text-lg font-bold text-gray-900">Revisar complemento de pago</h2>
-        <p className="mb-4 text-sm text-gray-500">
-          {complement.provider?.business_name} — Pago {complement.payment?.tran_id}
-        </p>
+        <p className="mb-4 text-sm text-gray-500">{complement.provider?.business_name}</p>
 
         <div className="p-3 mb-4 text-sm text-gray-700 bg-gray-50 rounded-xl">
-          {complement.total && <p><strong>Total:</strong> {formatMoney(complement.total)}</p>}
-          <p className="mt-1 text-xs text-gray-500 break-all"><strong>UUID:</strong> {complement.uuid}</p>
+          <p className="mb-1.5 font-semibold">
+            {payments.length > 1 ? `Ampara ${payments.length} pagos` : 'Ampara 1 pago'}
+          </p>
+          <ul className="space-y-0.5">
+            {payments.map((p) => (
+              <li key={p.id} className="flex justify-between text-xs">
+                <span>Pago {p.tran_id}</span>
+                <span className="font-medium">{formatMoney(p.amount)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="flex justify-between pt-1.5 mt-1.5 text-xs font-semibold border-t border-gray-200">
+            <span>Suma de pagos</span>
+            <span>{formatMoney(paymentsTotal)}</span>
+          </p>
+          <p className="mt-2 text-xs text-gray-500 break-all"><strong>UUID:</strong> {complement.uuid}</p>
         </div>
 
         <div className="space-y-4">
