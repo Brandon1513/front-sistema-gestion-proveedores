@@ -6,6 +6,7 @@ import { Button } from '../../components/common/Button';
 import { Table } from '../../components/shared/Table';
 import { DownloadButton } from '../../components/shared/DownloadButton';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
+import { SyncStatusBanner } from './components/SyncStatusBanner';
 import { formatMoney, formatDate, daysUntil, matchesTokens } from '../../utils/formatters';
 import {
   TYPE_LABELS, requestStatusInfo, REQUEST_STATUS_TABS,
@@ -593,8 +594,10 @@ export const FinanceAccountStatementPage = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Estado de Cuenta — Proveedores</h1>
+        
         <p className="text-sm text-gray-600">Consulta facturas, pagos, notas de crédito y gestiona solicitudes</p>
       </div>
+      <SyncStatusBanner />
       {activeTab !== 'credit_note_requests' && (
         <button
           onClick={handleExportExcel}
