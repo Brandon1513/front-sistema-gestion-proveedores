@@ -202,6 +202,11 @@ downloadComplementFile: async (id, kind, fallbackName = 'documento') => {
   triggerBlobDownload(response, fallbackName);
 },
 
+getSyncStatus: async () => {
+  const response = await api.get('/finance/sync-status');
+  return response.data;
+},
+
 };
 
 /**
