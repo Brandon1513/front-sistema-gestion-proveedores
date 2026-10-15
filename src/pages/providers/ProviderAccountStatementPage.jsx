@@ -12,8 +12,8 @@ import {
 import toast from 'react-hot-toast';
 
 const TABS = [
-  { id: 'my_submissions', label: 'Mis Facturas', icon: FileUp },
-  { id: 'invoices', label: 'Facturas', icon: FileText },
+  { id: 'my_submissions', label: 'Facturas Enviadas', icon: FileUp },
+  { id: 'invoices', label: 'Facturas en NetSuite', icon: FileText },
   { id: 'payments', label: 'Comprobantes de Pago', icon: CreditCard },
   { id: 'credit_memos', label: 'Notas de Crédito', icon: Receipt },
   { id: 'credit_note_requests', label: 'Notas de Crédito Recibidas', icon: Send },
@@ -97,12 +97,16 @@ export const ProviderAccountStatementPage = () => {
   });
 
   const complementByPaymentId = useMemo(() => {
-    const map = {};
-    (myComplements?.complements || []).forEach((c) => {
-      map[c.netsuite_vendor_payment_id] = c;
-    });
-    return map;
-  }, [myComplements]);
+  const map = {};
+  const list = myComplements?.complements || [];
+  // Primero los rechazados y luego los vigentes: si un pago tiene un
+  // complemento vigente, ese siempre gana sobre uno rechazado.
+  list.filter((c) => c.status === 'rejected')
+    .forEach((c) => (c.payments || []).forEach((p) => { map[p.id] = c; }));
+  list.filter((c) => c.status !== 'rejected')
+    .forEach((c) => (c.payments || []).forEach((p) => { map[p.id] = c; }));
+  return map;
+}, [myComplements]);
 
   const { data: mySubmissions, isLoading: submissionsLoading } = useQuery({
     queryKey: ['my-invoice-submissions'],
@@ -258,6 +262,13 @@ export const ProviderAccountStatementPage = () => {
     );
   }
 
+  const complementSince = data?.complement_required_since || COMPLEMENT_REQUIRED_SINCE_FALLBACK;
+  const eligiblePaymentsForComplement = (data?.payments || []).filter((p) => {
+  const existing = complementByPaymentId[p.id];
+  const covered = existing && existing.status !== 'rejected';
+  return p.tran_date && p.tran_date >= complementSince && !covered;
+});
+
   // ── Columnas ──
   const invoiceColumns = [
     { key: 'expand', label: '', sortable: false,
@@ -323,48 +334,56 @@ export const ProviderAccountStatementPage = () => {
         </button>
       ) },
       { key: 'complement', label: 'Complemento de Pago', sortable: false,
-  render: (r) => {
-    const complement = complementByPaymentId[r.id];
-    const appliesToPayment = r.tran_date && r.tran_date >= (data?.complement_required_since || COMPLEMENT_REQUIRED_SINCE_FALLBACK);
+        render: (r) => {
+          const complement = complementByPaymentId[r.id];
+          const appliesToPayment = r.tran_date && r.tran_date >= complementSince;
 
-    if (!appliesToPayment && !complement) {
-      return <span className="text-xs italic text-gray-400">No aplica</span>;
-    }
+          if (!appliesToPayment && !complement) {
+            return <span className="text-xs italic text-gray-400">No aplica</span>;
+          }
 
-    if (!complement) {
-      return (
-        <button
-          onClick={() => setUploadingComplementFor(r)}
-          className="px-3 py-1.5 text-xs font-semibold rounded-lg text-primary-700 bg-primary-50 hover:bg-primary-100"
-        >
-          Subir complemento
-        </button>
-      );
-    }
-    const statusMap = {
-      submitted: { label: 'En revisión', variant: 'pending', icon: Clock },
-      approved: { label: 'Validado', variant: 'success', icon: CheckCircle },
-      rejected: { label: 'Rechazado', variant: 'rejected', icon: XCircle },
-    };
-    const info = statusMap[complement.status] || statusMap.submitted;
-    const StatusIcon = info.icon;
-    return (
-      <div className="flex items-center gap-2">
-        <Badge variant={info.variant}>
-          <StatusIcon className="inline w-3 h-3 mr-1" />
-          {info.label}
-        </Badge>
-        {complement.status === 'rejected' && (
-          <button
-            onClick={() => setUploadingComplementFor(r)}
-            className="text-xs font-semibold text-primary-600 hover:underline"
-          >
-            Volver a subir
-          </button>
-        )}
-      </div>
-    );
-  } },
+          if (!complement) {
+            return (
+              <button
+                onClick={() => setUploadingComplementFor(r)}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg text-primary-700 bg-primary-50 hover:bg-primary-100"
+              >
+                Subir complemento
+              </button>
+            );
+          }
+
+          const statusMap = {
+            submitted: { label: 'En revisión', variant: 'pending', icon: Clock },
+            approved: { label: 'Validado', variant: 'success', icon: CheckCircle },
+            rejected: { label: 'Rechazado', variant: 'rejected', icon: XCircle },
+          };
+          const info = statusMap[complement.status] || statusMap.submitted;
+          const StatusIcon = info.icon;
+          const coveredCount = complement.payments?.length || 1;
+
+          return (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <Badge variant={info.variant}>
+                  <StatusIcon className="inline w-3 h-3 mr-1" />
+                  {info.label}
+                </Badge>
+                {complement.status === 'rejected' && (
+                  <button
+                    onClick={() => setUploadingComplementFor(r)}
+                    className="text-xs font-semibold text-primary-600 hover:underline"
+                  >
+                    Volver a subir
+                  </button>
+                )}
+              </div>
+              {coveredCount > 1 && (
+                <span className="text-xs text-gray-400">Cubre {coveredCount} pagos</span>
+              )}
+            </div>
+          );
+        } },
   ];
 
   const creditMemoColumns = [
@@ -673,7 +692,7 @@ export const ProviderAccountStatementPage = () => {
                           onClick={() => goToInvoice({ id: r.netsuite_vendor_invoice_id })}
                           className="flex items-center gap-1 text-xs font-semibold text-primary-600 hover:underline"
                         >
-                          Ver en Facturas
+                          Ver seguimiento
                           <ExternalLink className="w-3 h-3" />
                         </button>
                       );
@@ -739,11 +758,12 @@ export const ProviderAccountStatementPage = () => {
         <UploadInvoiceModal onClose={() => setShowUploadModal(false)} />
       )}
       {uploadingComplementFor && (
-        <UploadComplementModal
-          payment={uploadingComplementFor}
-          onClose={() => setUploadingComplementFor(null)}
-        />
-      )}
+          <UploadComplementModal
+            initialPayment={uploadingComplementFor}
+            availablePayments={eligiblePaymentsForComplement}
+            onClose={() => setUploadingComplementFor(null)}
+          />
+        )}
     </div>
   );
 };
@@ -957,14 +977,27 @@ const UploadInvoiceModal = ({ onClose }) => {
   );
 };
 
-const UploadComplementModal = ({ payment, onClose }) => {
+const UploadComplementModal = ({ initialPayment, availablePayments, onClose }) => {
   const queryClient = useQueryClient();
+  const [selectedIds, setSelectedIds] = useState([initialPayment.id]);
   const [pdf, setPdf] = useState(null);
   const [xml, setXml] = useState(null);
   const [error, setError] = useState(null);
 
+  // El pago desde el que se abrió el modal siempre debe aparecer en la lista
+  const options = availablePayments.some((p) => p.id === initialPayment.id)
+    ? availablePayments
+    : [initialPayment, ...availablePayments];
+
+  const toggle = (id) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const selectedTotal = options
+    .filter((p) => selectedIds.includes(p.id))
+    .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+
   const mutation = useMutation({
-    mutationFn: () => accountStatementService.submitPaymentComplement(payment.id, pdf, xml),
+    mutationFn: () => accountStatementService.submitPaymentComplement(selectedIds, pdf, xml),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-payment-complements'] });
       toast.success('Complemento de pago subido correctamente');
@@ -980,6 +1013,10 @@ const UploadComplementModal = ({ payment, onClose }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     setError(null);
+    if (selectedIds.length === 0) {
+      setError('Selecciona al menos un pago');
+      return;
+    }
     if (!pdf || !xml) {
       setError('Selecciona el PDF y el XML del complemento de pago');
       return;
@@ -989,15 +1026,45 @@ const UploadComplementModal = ({ payment, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="w-full max-w-md p-6 bg-white shadow-elevated rounded-2xl">
+      <div className="w-full max-w-lg p-6 bg-white shadow-elevated rounded-2xl max-h-[90vh] overflow-y-auto">
         <h2 className="mb-1 text-lg font-bold text-gray-900">Subir complemento de pago</h2>
-        <p className="mb-4 text-sm text-gray-500">Pago {payment.tran_id} — {formatMoney(payment.amount)}</p>
+        <p className="mb-4 text-sm text-gray-500">
+          Un complemento puede amparar varios pagos. Marca todos los que corresponden.
+        </p>
 
         {error && (
           <div className="p-3 mb-4 text-sm text-red-600 border border-red-200 bg-red-50 rounded-xl">{error}</div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block mb-1.5 text-sm font-medium text-gray-700">Pagos que ampara</label>
+            <div className="overflow-y-auto border border-gray-200 divide-y divide-gray-100 max-h-56 rounded-xl">
+              {options.map((p) => (
+                <label
+                  key={p.id}
+                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer text-sm ${
+                    selectedIds.includes(p.id) ? 'bg-primary-50' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(p.id)}
+                    onChange={() => toggle(p.id)}
+                    className="w-4 h-4 border-gray-300 rounded text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="flex-1 font-medium text-gray-900">Pago {p.tran_id}</span>
+                  <span className="text-xs text-gray-500">{formatDate(p.tran_date)}</span>
+                  <span className="font-semibold text-gray-900">{formatMoney(p.amount)}</span>
+                </label>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-gray-500">
+              {selectedIds.length} pago{selectedIds.length !== 1 ? 's' : ''} seleccionado{selectedIds.length !== 1 ? 's' : ''}
+              {' · '}Suma: <span className="font-semibold text-gray-700">{formatMoney(selectedTotal)}</span>
+            </p>
+          </div>
+
           <div>
             <label className="block mb-1.5 text-sm font-medium text-gray-700">Archivo PDF</label>
             <input

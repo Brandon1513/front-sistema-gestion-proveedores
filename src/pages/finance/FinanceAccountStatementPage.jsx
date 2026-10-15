@@ -29,7 +29,7 @@ import {
 import toast from 'react-hot-toast';
 
 const TABS = [
-  { id: 'invoices', label: 'Facturas', icon: FileText },
+  { id: 'invoices', label: 'Facturas en NetSuite', icon: FileText },
   { id: 'payments', label: 'Pagos', icon: CreditCard },
   { id: 'credit_memos', label: 'Notas de Crédito (NetSuite)', icon: Receipt },
   { id: 'credit_note_requests', label: 'Solicitudes de Nota de Crédito', icon: Send },
@@ -251,9 +251,12 @@ export const FinanceAccountStatementPage = () => {
   const allComplements = complementsData?.data || [];
 
   const filteredComplements = useMemo(() => {
-    if (search.trim()) {
-      return allComplements.filter((r) =>
-        matchesTokens([r.payment?.tran_id, r.provider?.business_name].filter(Boolean).join(' '), search)
+          if (search.trim()) {
+            return allComplements.filter((r) =>
+        matchesTokens(
+          [(r.payments || []).map((p) => p.tran_id).join(' '), r.provider?.business_name].filter(Boolean).join(' '),
+          search
+        )
       );
     }
     return allComplements.filter((r) => r.status === complementStatusFilter);
@@ -524,8 +527,12 @@ export const FinanceAccountStatementPage = () => {
   const complementColumns = [
     { key: 'provider', label: 'Proveedor', sortable: true, accessor: (r) => r.provider?.business_name || '',
       render: (r) => <span className="text-sm text-gray-900">{r.provider?.business_name}</span> },
-    { key: 'payment', label: 'Pago', sortable: false,
-      render: (r) => <span className="text-sm font-medium text-gray-900">{r.payment?.tran_id || '—'}</span> },
+    { key: 'payment', label: 'Pago(s)', sortable: false,
+        render: (r) => (
+          <span className="text-sm font-medium text-gray-900">
+            {(r.payments || []).map((p) => p.tran_id).join(', ') || '—'}
+          </span>
+        ) },
     { key: 'issued_at', label: 'Fecha', sortable: false,
       render: (r) => <span className="text-sm text-gray-600">{formatDate(r.issued_at)}</span> },
     { key: 'total', label: 'Monto', sortable: false,

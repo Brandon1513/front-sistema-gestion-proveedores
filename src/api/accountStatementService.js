@@ -170,9 +170,9 @@ getMyPaymentComplements: async () => {
   return response.data;
 },
 
-submitPaymentComplement: async (paymentId, pdf, xml) => {
+submitPaymentComplement: async (paymentIds, pdf, xml) => {
   const formData = new FormData();
-  formData.append('netsuite_vendor_payment_id', paymentId);
+  paymentIds.forEach((id) => formData.append('payment_ids[]', id));
   formData.append('pdf', pdf);
   formData.append('xml', xml);
   const response = await api.post('/provider/payment-complements', formData, {
