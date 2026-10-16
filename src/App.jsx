@@ -42,6 +42,7 @@ import { MyProviderRequestsPage } from './pages/providers/MyProviderRequestsPage
 import { ProviderRequestsQueuePage } from './pages/providers/ProviderRequestsQueuePage';
 import { ProviderAccountStatementPage } from './pages/providers/ProviderAccountStatementPage';
 import { FinanceAccountStatementPage } from './pages/finance/FinanceAccountStatementPage';
+import { ChangeRequestsInboxPage } from './pages/change-requests/ChangeRequestsInboxPage';
 
 import './styles/custom-animations.css';
 
@@ -174,7 +175,11 @@ function App() {
                 <ProviderRequestsQueuePage />
               </RoleProtectedRoute>
             } />
-
+            <Route path="change-requests" element={
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','cuentas_por_pagar']}>
+                <ChangeRequestsInboxPage />
+              </RoleProtectedRoute>
+            } />
 
             {/* ── Configuración ── */}
             <Route path="settings/catalog" element={
