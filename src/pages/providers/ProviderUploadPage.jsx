@@ -3,7 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { providerDashboardService } from '../../api/providerDashboardService';
 import { providerDocumentService } from '../../api/providerDocumentService';
+import { changeRequestService, downloadFile } from '../../api/changeRequestService';
 import { Button } from '../../components/common/Button';
+import { ChangeRequestModal } from '../../components/providers/ChangeRequestModal';
 import { showToast } from '../../utils/toast';
 import { canUploadDocument } from '../../utils/documentUploadRules';
 import api from '../../api/axios';
@@ -11,6 +13,7 @@ import {
   Upload, FileText, X, CheckCircle, AlertCircle,
   Calendar, File, Info, Lock, Layers, Clock,
   Package, ChevronDown, Download, FileBadge,
+  MessageSquare, Hourglass,
 } from 'lucide-react';
 
 // Códigos VIEJOS que ya usan selector de producto (se mantienen por
@@ -24,6 +27,9 @@ const PRODUCT_SELECTOR_CODES = [
   'carta_declaracion',
   'cartas_declaracion',
 ];
+
+const formatDate = (value) =>
+  value ? new Date(value).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
 
 export const ProviderUploadPage = () => {
   const navigate    = useNavigate();
@@ -39,6 +45,7 @@ export const ProviderUploadPage = () => {
   const [dragActive, setDragActive]                   = useState(false);
   const [uploadError, setUploadError]                 = useState('');
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const [changeModalOpen, setChangeModalOpen]         = useState(false);
 
   const { data: requiredData, isLoading } = useQuery({
     queryKey: ['provider-required-documents'],
@@ -107,6 +114,20 @@ export const ProviderUploadPage = () => {
   });
   const singleTemplates = singleTemplatesData?.templates || [];
 
+  // ✅ NUEVO: solicitudes de cambio (convenios). El backend responde
+  // allows_change_requests=false para cualquier otro documento.
+  const { data: changeInfo } = useQuery({
+    queryKey: ['provider-change-request', selectedDocInfo?.id],
+    queryFn: () => changeRequestService.getForDocument(selectedDocInfo.id),
+    enabled: isSingleFormatDoc && !!selectedDocInfo?.id && canUpload,
+    staleTime: 60 * 1000,
+  });
+  const allowsChangeRequests  = !!changeInfo?.allows_change_requests;
+  const pendingChange         = allowsChangeRequests ? changeInfo?.pending       || null : null;
+  const personalizedTemplate  = allowsChangeRequests ? changeInfo?.personalized  || null : null;
+  const lastResolvedChange    = allowsChangeRequests ? changeInfo?.last_resolved || null : null;
+  const changeRequestPending  = !!pendingChange;
+
   const alreadyUploadedProducts = useMemo(() => {
     if (!selectedDocInfo?.documents) return new Set();
     return new Set(
@@ -152,12 +173,16 @@ export const ProviderUploadPage = () => {
     return d.toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' });
   }, [hasAutoExpiry, issueDate, selectedDocInfo?.expiry_months]);
 
+  // Carga bloqueada por cualquier motivo
+  const uploadLocked = !selectedDocType || !canUpload || selectedProductAlreadyUploaded || changeRequestPending;
+
   const uploadMutation = useMutation({
     mutationFn: providerDocumentService.upload,
     onSuccess: () => {
-      queryClient.invalidateQueries(['provider-required-documents']);
-      queryClient.invalidateQueries(['provider-documents']);
-      queryClient.invalidateQueries(['provider-stats']);
+      // TanStack Query v5: invalidateQueries recibe un objeto de filtros
+      queryClient.invalidateQueries({ queryKey: ['provider-required-documents'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['provider-documents'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['provider-stats'], exact: false });
       setSelectedFile(null); setSelectedDocType(''); setSelectedProductId('');
       setIssueDate(''); setExpiryDate(''); setUploadError('');
       showToast.success('🎉 ¡Documento cargado exitosamente!');
@@ -204,17 +229,20 @@ export const ProviderUploadPage = () => {
     if (!tmpl) return;
     setDownloadingTemplate(true);
     try {
-      const response = await api.get(`/document-templates/${tmpl.id}/download`, { responseType: 'blob' });
-      const url  = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', tmpl.filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      await downloadFile(`/document-templates/${tmpl.id}/download`, tmpl.filename);
       showToast.success('Formato descargado');
     } catch { showToast.error('Error al descargar el formato'); }
+    finally { setDownloadingTemplate(false); }
+  };
+
+  // ✅ NUEVO: descarga de la versión personalizada del convenio
+  const handleDownloadPersonalized = async () => {
+    if (!personalizedTemplate) return;
+    setDownloadingTemplate(true);
+    try {
+      await changeRequestService.downloadPersonalized(personalizedTemplate.id, personalizedTemplate.filename);
+      showToast.success('Convenio descargado');
+    } catch { showToast.error('Error al descargar el convenio'); }
     finally { setDownloadingTemplate(false); }
   };
 
@@ -222,6 +250,9 @@ export const ProviderUploadPage = () => {
     e.preventDefault();
     if (!selectedDocType)  { setUploadError('Selecciona un tipo de documento'); return; }
     if (!selectedFile)     { setUploadError('Selecciona un archivo'); return; }
+    if (changeRequestPending) {
+      setUploadError('Tienes una solicitud de cambios en revisión. Espera la versión ajustada antes de subir el convenio firmado.'); return;
+    }
     if (usesProductSelector && !selectedProductId) {
       setUploadError('Selecciona el producto al que corresponde este documento'); return;
     }
@@ -339,6 +370,8 @@ export const ProviderUploadPage = () => {
     </div>
   );
 
+  const showSingleFormatExtras = isSingleFormatDoc && canUpload;
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -366,6 +399,7 @@ export const ProviderUploadPage = () => {
               setSelectedDocType(e.target.value);
               setSelectedFile(null); setSelectedProductId('');
               setIssueDate(''); setExpiryDate(''); setUploadError('');
+              setChangeModalOpen(false);
             }}
             required
             className="w-full px-3 py-2 text-sm bg-white border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
@@ -443,9 +477,101 @@ export const ProviderUploadPage = () => {
           )}
         </div>
 
+        {/* ✅ NUEVO: versión personalizada del convenio (reemplaza a la plantilla base) */}
+        {showSingleFormatExtras && personalizedTemplate && (
+          <div className="p-5 border-2 rounded-xl border-emerald-200 bg-emerald-50">
+            <div className="flex items-start gap-3">
+              <div className="flex items-center justify-center flex-shrink-0 w-10 h-10 rounded-lg shadow-sm bg-gradient-to-br from-emerald-500 to-teal-600">
+                <FileBadge className="w-5 h-5 text-white"/>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-emerald-900">Tu versión ajustada del convenio</p>
+                <p className="mt-1 text-xs text-emerald-700">
+                  Incluye los cambios que solicitaste, atendidos el {formatDate(personalizedTemplate.attended_at)}.
+                  Descárgala, fírmala y súbela aquí.
+                </p>
+                <button type="button" onClick={handleDownloadPersonalized}
+                  disabled={downloadingTemplate}
+                  className="inline-flex items-center gap-2 px-4 py-2 mt-3 text-sm font-semibold text-white transition-colors shadow-sm bg-emerald-600 hover:bg-emerald-700 rounded-xl disabled:opacity-60 w-fit">
+                  <Download className="w-4 h-4"/>
+                  {downloadingTemplate ? 'Descargando...' : `Descargar: ${personalizedTemplate.filename}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ✅ Recuadro de formatos para documentos SIN producto */}
-        {isSingleFormatDoc && canUpload && singleTemplates.length > 0 && (
+        {showSingleFormatExtras && !personalizedTemplate && singleTemplates.length > 0 && (
           <TemplatesBox templates={singleTemplates}/>
+        )}
+
+        {/* ✅ NUEVO: solicitud de cambios al convenio */}
+        {showSingleFormatExtras && allowsChangeRequests && (
+          changeRequestPending ? (
+            <div className="p-5 border-2 rounded-xl border-amber-200 bg-amber-50">
+              <div className="flex items-start gap-3">
+                <div className="flex items-center justify-center flex-shrink-0 w-10 h-10 rounded-lg bg-amber-100">
+                  <Hourglass className="w-5 h-5 text-amber-700"/>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-amber-900">Cambios solicitados, en revisión</p>
+                  <p className="mt-1 text-xs text-amber-700">
+                    Enviaste tu solicitud el {formatDate(pendingChange.created_at)}. Te avisaremos por correo cuando
+                    la versión ajustada esté lista; mientras tanto la carga del convenio firmado queda en pausa.
+                  </p>
+                  <p className="p-3 mt-3 text-xs text-gray-700 whitespace-pre-line bg-white border rounded-lg border-amber-200 line-clamp-4">
+                    {pendingChange.description}
+                  </p>
+                  {pendingChange.images_count > 0 && (
+                    <p className="mt-2 text-xs text-amber-700">
+                      {pendingChange.images_count} {pendingChange.images_count === 1 ? 'imagen adjunta' : 'imágenes adjuntas'}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-5 bg-white border-2 border-gray-200 rounded-xl">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="flex items-center justify-center flex-shrink-0 w-10 h-10 rounded-lg bg-primary-100">
+                    <MessageSquare className="w-5 h-5 text-primary-600"/>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-900">¿Hay algo del convenio con lo que no estés de acuerdo?</p>
+                    <p className="mt-1 text-xs text-gray-600">
+                      Antes de firmarlo, puedes pedir que ajustemos una cláusula o un dato. Te enviaremos la versión corregida.
+                    </p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setChangeModalOpen(true)}
+                  className="inline-flex items-center justify-center flex-shrink-0 gap-2 px-4 py-2 text-sm font-semibold transition-colors bg-white border-2 rounded-xl text-primary-700 border-primary-300 hover:bg-primary-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+                  <MessageSquare className="w-4 h-4"/>
+                  Solicitar cambios
+                </button>
+              </div>
+
+              {lastResolvedChange?.status === 'rejected' && (
+                <div className="flex items-start gap-2 p-3 mt-4 border-2 border-gray-200 rounded-lg bg-gray-50">
+                  <Info className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5"/>
+                  <p className="text-xs text-gray-700">
+                    <span className="font-semibold">Tu última solicitud no procedió</span> ({formatDate(lastResolvedChange.attended_at)}).
+                    {lastResolvedChange.response_notes && <> Motivo: {lastResolvedChange.response_notes}</>}
+                  </p>
+                </div>
+              )}
+
+              {lastResolvedChange?.status === 'attended' && lastResolvedChange.response_notes && (
+                <div className="flex items-start gap-2 p-3 mt-4 border-2 rounded-lg border-emerald-200 bg-emerald-50">
+                  <Info className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5"/>
+                  <p className="text-xs text-emerald-800">
+                    <span className="font-semibold">Comentarios de Cuentas por Pagar:</span> {lastResolvedChange.response_notes}
+                  </p>
+                </div>
+              )}
+            </div>
+          )
         )}
 
         {/* ── Selector de producto ───────────────────────────────────────────── */}
@@ -528,14 +654,13 @@ export const ProviderUploadPage = () => {
         {/* ── Zona drag & drop ───────────────────────────────────────────────── */}
         <div
           className={`relative p-8 border-2 border-dashed rounded-xl transition-all duration-200
-            ${!selectedDocType || !canUpload || selectedProductAlreadyUploaded
-              ? 'opacity-50 pointer-events-none bg-gray-50' : ''}
+            ${uploadLocked ? 'opacity-50 pointer-events-none bg-gray-50' : ''}
             ${dragActive ? 'border-primary-500 bg-primary-50 scale-[1.02]' : 'border-gray-300 bg-white hover:border-primary-300'}`}
           onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}>
           <input type="file" id="file-input" className="hidden"
             onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-            disabled={!selectedDocType || !canUpload || selectedProductAlreadyUploaded}/>
+            disabled={uploadLocked}/>
           {selectedFile ? (
             <div className="flex items-center justify-between p-4 border-2 border-green-200 rounded-xl bg-green-50">
               <div className="flex items-center gap-4">
@@ -567,7 +692,7 @@ export const ProviderUploadPage = () => {
         </div>
 
         {/* ── Fechas ────────────────────────────────────────────────────────── */}
-        {selectedDocInfo?.requires_expiry && canUpload && !selectedProductAlreadyUploaded && (
+        {selectedDocInfo?.requires_expiry && canUpload && !selectedProductAlreadyUploaded && !changeRequestPending && (
           <div className="p-6 bg-white border-2 border-gray-200 shadow-sm rounded-xl">
             <h3 className="flex items-center gap-2 mb-4 text-lg font-bold text-gray-900">
               <Calendar className="w-5 h-5 text-primary-600"/>Fechas del Documento
@@ -637,7 +762,7 @@ export const ProviderUploadPage = () => {
         <div className="flex gap-3 pt-2">
           <Button type="submit" variant="primary" leftIcon={<Upload className="w-4 h-4"/>}
             disabled={
-              !selectedDocType || !selectedFile || !canUpload ||
+              !selectedDocType || !selectedFile || !canUpload || changeRequestPending ||
               (usesProductSelector && (!selectedProductId || selectedProductAlreadyUploaded))
             }
             loading={uploadMutation.isPending} className="flex-1">
@@ -672,6 +797,13 @@ export const ProviderUploadPage = () => {
           </div>
         </div>
       </div>
+
+      {/* ✅ NUEVO: modal de solicitud de cambios */}
+      <ChangeRequestModal
+        open={changeModalOpen}
+        onClose={() => setChangeModalOpen(false)}
+        documentType={selectedDocInfo ? { id: selectedDocInfo.id, name: selectedDocInfo.name } : null}
+      />
     </div>
   );
 };

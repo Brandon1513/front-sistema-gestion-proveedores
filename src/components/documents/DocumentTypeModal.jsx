@@ -6,7 +6,7 @@ import { docTypeService } from '../../api/docTypeService';
 import { GenericTemplatesSection } from './GenericTemplatesSection';
 import { CATEGORY_OPTIONS, EXPIRY_PRESETS } from '../../constants/documentTypeConstants';
 import {
-  FileText, X, FolderOpen, Clock, Calendar, Users, AlertCircle, Package, Info,
+  FileText, X, FolderOpen, Clock, Calendar, Users, AlertCircle, Package, Info, MessageSquare,
 } from 'lucide-react';
 
 export const DocumentTypeModal = ({ document, providerTypes, groups, onClose }) => {
@@ -18,19 +18,20 @@ export const DocumentTypeModal = ({ document, providerTypes, groups, onClose }) 
   const isEditing = !!activeDocument;
 
   const [form, setForm] = useState({
-    name:                document?.name               || '',
-    code:                document?.code               || '',
-    description:         document?.description        || '',
-    category:            document?.category           || 'fiscal',
-    group_name:          document?.group_name         || '',
-    requires_expiry:     document?.requires_expiry    ?? false,
-    expiry_alert_days:   document?.expiry_alert_days  || 30,
-    expiry_months:       document?.expiry_months      || null,
-    allows_multiple:     document?.allows_multiple    ?? false,
-    is_product_specific: document?.is_product_specific ?? false, // ✅ NUEVO
-    allowed_extensions:  document?.allowed_extensions || '',
-    max_file_size_mb:    document?.max_file_size_mb   || 10,
-    is_active:           document?.is_active          ?? true,
+    name:                   document?.name                   || '',
+    code:                   document?.code                   || '',
+    description:            document?.description            || '',
+    category:               document?.category               || 'fiscal',
+    group_name:             document?.group_name             || '',
+    requires_expiry:        document?.requires_expiry        ?? false,
+    expiry_alert_days:      document?.expiry_alert_days      || 30,
+    expiry_months:          document?.expiry_months          || null,
+    allows_multiple:        document?.allows_multiple        ?? false,
+    is_product_specific:    document?.is_product_specific    ?? false,
+    allows_change_requests: document?.allows_change_requests ?? false, // ✅ NUEVO
+    allowed_extensions:     document?.allowed_extensions     || '',
+    max_file_size_mb:       document?.max_file_size_mb       || 10,
+    is_active:              document?.is_active              ?? true,
     applies_to_existing: true,
     provider_type_ids:   document?.provider_types?.map(pt => pt.id) || [],
     is_required_map:     document?.provider_types?.reduce((acc, pt) => {
@@ -39,15 +40,30 @@ export const DocumentTypeModal = ({ document, providerTypes, groups, onClose }) 
   });
   const [error, setError] = useState('');
 
+  // Para avisar si se apaga la bandera en un documento que la tenía
+  const hadChangeRequests = !!document?.allows_change_requests;
+
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
   // ✅ Ser "por producto" implica "múltiples archivos" — se sube uno por
   // cada producto que el proveedor tenga registrado. Lo forzamos junto.
+  // Las solicitudes de cambio solo funcionan en documentos de formato único,
+  // así que activar "por producto" las apaga.
   const toggleProductSpecific = () => {
     setForm(f => {
       const next = !f.is_product_specific;
-      return { ...f, is_product_specific: next, allows_multiple: next ? true : f.allows_multiple };
+      return {
+        ...f,
+        is_product_specific:    next,
+        allows_multiple:        next ? true : f.allows_multiple,
+        allows_change_requests: next ? false : f.allows_change_requests,
+      };
     });
+  };
+
+  const toggleChangeRequests = () => {
+    if (form.is_product_specific) return;
+    set('allows_change_requests', !form.allows_change_requests);
   };
 
   const toggleProviderType = (ptId) => {
@@ -74,7 +90,8 @@ export const DocumentTypeModal = ({ document, providerTypes, groups, onClose }) 
       ? docTypeService.update(activeDocument.id, data)
       : docTypeService.create(data),
     onSuccess: (res) => {
-      queryClient.invalidateQueries(['document-types']);
+      // TanStack Query v5: invalidateQueries recibe un objeto de filtros
+      queryClient.invalidateQueries({ queryKey: ['document-types'], exact: false });
       if (!activeDocument) {
         setCreatedDocument(res.document);
         showToast.success(
@@ -201,7 +218,7 @@ export const DocumentTypeModal = ({ document, providerTypes, groups, onClose }) 
             )}
           </div>
 
-          {/* ✅ NUEVO — ¿Aplica por producto específico? */}
+          {/* ✅ ¿Aplica por producto específico? */}
           <div className="p-4 space-y-3 border-2 border-teal-200 rounded-xl bg-teal-50">
             <div className="flex items-center justify-between">
               <div className="flex-1 pr-3">
@@ -225,6 +242,46 @@ export const DocumentTypeModal = ({ document, providerTypes, groups, onClose }) 
                 <p className="text-xs text-teal-700">
                   Después de guardar, ve al panel <strong>"Formatos de {form.name || 'este documento'}"</strong> en la
                   vista principal de Gestión de Documentos para asignar una plantilla por cada producto (opcional).
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* ✅ NUEVO — ¿El proveedor puede solicitar cambios? */}
+          <div className={`p-4 space-y-3 border-2 rounded-xl ${form.is_product_specific ? 'border-gray-200 bg-gray-50 opacity-70' : 'border-indigo-200 bg-indigo-50'}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex-1 pr-3">
+                <p className={`text-sm font-semibold flex items-center gap-1.5 ${form.is_product_specific ? 'text-gray-600' : 'text-indigo-800'}`}>
+                  <MessageSquare className={`w-4 h-4 ${form.is_product_specific ? 'text-gray-400' : 'text-indigo-600'}`}/>
+                  ¿El proveedor puede solicitar cambios a la plantilla?
+                </p>
+                <p className={`text-xs mt-0.5 ${form.is_product_specific ? 'text-gray-500' : 'text-indigo-600'}`}>
+                  {form.is_product_specific
+                    ? 'No disponible en documentos por producto.'
+                    : 'Antes de firmar, el proveedor podrá pedir ajustes con texto e imágenes. Cuentas por Pagar los atiende y le envía su versión personalizada. Pensado para convenios comerciales.'}
+                </p>
+              </div>
+              <button type="button" onClick={toggleChangeRequests} disabled={form.is_product_specific}
+                role="switch" aria-checked={form.allows_change_requests}
+                aria-label="Permitir solicitudes de cambio"
+                className={`flex-shrink-0 w-12 h-6 rounded-full transition-colors relative disabled:cursor-not-allowed ${form.allows_change_requests ? 'bg-indigo-500' : 'bg-gray-300'}`}>
+                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.allows_change_requests ? 'translate-x-6' : 'translate-x-0.5'}`}/>
+              </button>
+            </div>
+            {form.allows_change_requests && !form.is_product_specific && (
+              <div className="flex items-start gap-2 p-2.5 border border-indigo-300 rounded-lg bg-white">
+                <Info className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0 mt-0.5"/>
+                <p className="text-xs text-indigo-700">
+                  Adjunta la plantilla base en "Plantillas de apoyo". Es la que descargan los proveedores que no han pedido cambios.
+                </p>
+              </div>
+            )}
+            {hadChangeRequests && !form.allows_change_requests && (
+              <div className="flex items-start gap-2 p-2.5 border border-amber-300 rounded-lg bg-amber-50">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5"/>
+                <p className="text-xs text-amber-800">
+                  Al apagarlo, los proveedores dejan de ver el botón y su versión personalizada; vuelven a descargar la plantilla base.
+                  Las solicitudes pendientes siguen en la bandeja de Cuentas por Pagar.
                 </p>
               </div>
             )}
