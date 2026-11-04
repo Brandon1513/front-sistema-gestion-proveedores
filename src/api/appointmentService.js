@@ -60,12 +60,10 @@ export const appointmentService = {
     const r = await api.get('/food-engineer/appointments', { params });
     return r.data;
   },
-  registerReception: async (id, data) => {
-    // data.items = [{ id, quantity_received, received_unit_id, quantity_rejected?, rejection_reason?, reception_notes? }]
-    const r = await api.post(`/food-engineer/appointments/${id}/reception`, {
-      reception_notes: data.reception_notes,
-      items: data.items,
-    });
+    registerReception: async (id, data) => {
+    // data = { reception_notes?, delivery_conditions: [{ key, passed, notes? }], items: [{ id, quantity_received, received_unit_id, quantity_rejected?, rejection_reason?, provider_notes?, reception_notes? }] }
+    // Se envía el objeto completo para que los campos nuevos no se pierdan en el camino
+    const r = await api.post(`/food-engineer/appointments/${id}/reception`, data);
     return r.data;
   },
 

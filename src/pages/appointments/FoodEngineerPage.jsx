@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { appointmentService } from '../../api/appointmentService';
 import api from '../../api/axios';
@@ -8,6 +8,7 @@ import {
   FlaskConical, Clock, CheckCircle, XCircle, ChevronDown, ChevronUp,
   X, AlertCircle, History, Info, Search, Filter, Package, Calendar,
   ChevronLeft, ChevronRight, Wrench, UserX, Shield, FileText, RefreshCw, Ban,
+  Camera, Eye, Lock, ClipboardCheck,
 } from 'lucide-react';
 
 const DAYS   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
@@ -33,6 +34,350 @@ const REJECTION_REASONS = [
   { value: 'inocuidad', label: 'Inocuidad' },
   { value: 'calidad',   label: 'Calidad'   },
 ];
+
+// ✅ Fotos de evidencia por ítem (debe coincidir con AppointmentItem::MAX_PHOTOS)
+const MAX_PHOTOS = 3;
+
+const FOOD_ENGINEER_QUERY_KEYS = ['food-engineer-month', 'food-engineer-day', 'food-engineer-week', 'food-engineer-history'];
+
+// ✅ Condiciones de la entrega (mismas llaves que Appointment::DELIVERY_CONDITIONS en el back)
+const DELIVERY_CONDITIONS = [
+  { key: 'docs_complete',     label: 'Documentación completa',           description: 'Entregó toda la documentación en tiempo y forma' },
+  { key: 'docs_correct',      label: 'Documentación correcta',           description: 'No fue necesario solicitar correcciones a la documentación' },
+  { key: 'vehicle_condition', label: 'Condiciones de la unidad',         description: 'Unidad limpia, con lámina de cartón y en buen estado' },
+  { key: 'operator_attire',   label: 'Vestimenta adecuada del operador', description: 'El operador porta la vestimenta requerida' },
+];
+
+// ─── Checklist de condiciones (formulario) ───────────────────────────────────
+const DeliveryConditionsForm = ({ value, onChange, securityRef }) => (
+  <div className="p-4 space-y-3 border-2 border-indigo-200 rounded-xl bg-indigo-50/30">
+    <div>
+      <p className="flex items-center gap-2 text-sm font-bold text-gray-900">
+        <ClipboardCheck className="w-4 h-4 text-indigo-600"/>Condiciones de la entrega <span className="text-red-500">*</span>
+      </p>
+      <p className="mt-0.5 flex items-center gap-1 text-[11px] text-blue-600"><Eye className="w-3 h-3"/>El resultado y las observaciones son visibles para el proveedor</p>
+    </div>
+    {DELIVERY_CONDITIONS.map(c => {
+      const v = value[c.key];
+      return (
+        <div key={c.key} className={`p-3 rounded-xl border-2 bg-white ${
+          v.passed === false ? 'border-red-200' : v.passed === true ? 'border-teal-200' : 'border-gray-200'
+        }`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-800">{c.label}</p>
+              <p className="text-xs text-gray-500">{c.description}</p>
+            </div>
+            <div className="flex gap-1.5">
+              <button type="button" onClick={() => onChange(c.key, { passed: true, notes: '' })}
+                className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg border-2 transition-all ${
+                  v.passed === true ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-gray-200 text-gray-500 hover:border-teal-300'
+                }`}>
+                <CheckCircle className="w-3.5 h-3.5"/>Cumple
+              </button>
+              <button type="button" onClick={() => onChange(c.key, { passed: false, notes: v.notes })}
+                className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg border-2 transition-all ${
+                  v.passed === false ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-200 text-gray-500 hover:border-red-300'
+                }`}>
+                <XCircle className="w-3.5 h-3.5"/>No cumple
+              </button>
+            </div>
+          </div>
+          {c.key === 'docs_complete' && securityRef}
+          {v.passed === false && (
+            <div className="mt-2">
+              <textarea value={v.notes} onChange={e => onChange(c.key, { passed: false, notes: e.target.value })}
+                rows={2} maxLength={500} placeholder="Explica al proveedor por qué no cumple... *"
+                className="w-full px-3 py-2 text-sm border-2 border-red-200 resize-none rounded-xl focus:outline-none focus:border-red-400 bg-red-50/30"/>
+            </div>
+          )}
+        </div>
+      );
+    })}
+  </div>
+);
+
+// ─── Resumen de condiciones (recepción ya registrada) ─────────────────────────
+const DeliveryConditionsSummary = ({ conditions }) => {
+  if (!conditions?.length) return null;
+  const failed = conditions.filter(c => !c.passed).length;
+  return (
+    <div className="p-3 space-y-1.5 bg-white border border-gray-200 rounded-xl">
+      <div className="flex items-center justify-between">
+        <p className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+          <ClipboardCheck className="w-3.5 h-3.5"/>Condiciones de la entrega
+        </p>
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${failed ? 'bg-red-100 text-red-700' : 'bg-teal-100 text-teal-700'}`}>
+          {failed ? `${failed} no cumple${failed > 1 ? 'n' : ''}` : 'Todo cumple'}
+        </span>
+      </div>
+      {conditions.map(c => (
+        <div key={c.key}>
+          <p className="flex items-center gap-1.5 text-sm text-gray-800">
+            {c.passed ? <CheckCircle className="flex-shrink-0 w-4 h-4 text-teal-500"/> : <XCircle className="flex-shrink-0 w-4 h-4 text-red-500"/>}
+            {c.label}
+          </p>
+          {!c.passed && c.notes && <p className="ml-5 text-xs text-red-700">{c.notes}</p>}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ─── Fotos: compresión y subida ───────────────────────────────────────────────
+// Reduce la foto a máx. 1600 px por lado y JPEG al 80% antes de subirla
+// (una foto de celular de ~4 MB queda en ~300 KB). Si el navegador no puede
+// leer la imagen, se envía el archivo original.
+const compressImage = (file, maxDim = 1600, quality = 0.8) => new Promise((resolve) => {
+  if (!file.type?.startsWith('image/')) { resolve(file); return; }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    const scale  = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const canvas = document.createElement('canvas');
+    canvas.width  = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    canvas.toBlob((blob) => {
+      if (!blob) { resolve(file); return; }
+      const name = (file.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg';
+      resolve(new File([blob], name, { type: 'image/jpeg' }));
+    }, 'image/jpeg', quality);
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+  img.src = url;
+});
+
+const uploadItemPhotos = async (itemId, files) => {
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append('photos[]', await compressImage(file));
+  }
+  const res = await api.post(`/appointment-items/${itemId}/photos`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+};
+
+// ─── Miniatura de una foto ya guardada (se pide con el token, como blob) ─────
+const PhotoThumb = ({ photoId, onDelete }) => {
+  const [src, setSrc] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let objectUrl;
+    let alive = true;
+    api.get(`/appointment-item-photos/${photoId}`, { responseType: 'blob' })
+      .then(res => {
+        if (!alive) return;
+        objectUrl = URL.createObjectURL(res.data);
+        setSrc(objectUrl);
+      })
+      .catch(() => alive && setFailed(true));
+    return () => { alive = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [photoId]);
+
+  return (
+    <div className="relative w-20 h-20 overflow-hidden bg-gray-100 border-2 border-gray-200 rounded-lg">
+      {src ? (
+        <a href={src} target="_blank" rel="noreferrer" title="Ver foto completa">
+          <img src={src} alt="Evidencia" className="object-cover w-full h-full"/>
+        </a>
+      ) : failed ? (
+        <div className="flex items-center justify-center w-full h-full text-[10px] text-gray-400 text-center p-1">No disponible</div>
+      ) : (
+        <div className="flex items-center justify-center w-full h-full">
+          <div className="w-5 h-5 border-2 rounded-full border-t-teal-500 animate-spin"/>
+        </div>
+      )}
+      {onDelete && (
+        <button type="button" onClick={onDelete} title="Eliminar foto"
+          className="absolute flex items-center justify-center w-5 h-5 text-white rounded-full top-1 right-1 bg-black/60 hover:bg-red-600">
+          <X className="w-3 h-3"/>
+        </button>
+      )}
+    </div>
+  );
+};
+
+// ─── Fotos guardadas de un ítem ya recibido (ver, agregar, eliminar) ─────────
+const ItemPhotos = ({ item, canEdit = true }) => {
+  const queryClient = useQueryClient();
+  const [photos, setPhotos] = useState(item.photos || []);
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef(null);
+
+  if (item.reception_status === 'not_delivered') return null;
+  if (!photos.length && !canEdit) return null;
+
+  const left = MAX_PHOTOS - photos.length;
+  const refresh = () => FOOD_ENGINEER_QUERY_KEYS.forEach(k => queryClient.invalidateQueries([k]));
+
+  const handleAdd = async (e) => {
+    const files = Array.from(e.target.files || []).slice(0, left);
+    e.target.value = '';
+    if (!files.length) return;
+    setBusy(true);
+    try {
+      const res = await uploadItemPhotos(item.id, files);
+      setPhotos(res.photos || []);
+      refresh();
+      showToast.success('Fotos guardadas');
+    } catch (err) {
+      showToast.error(err.response?.data?.message || 'No se pudieron subir las fotos');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDelete = async (photoId) => {
+    if (!window.confirm('¿Eliminar esta foto? El proveedor dejará de verla.')) return;
+    try {
+      await api.delete(`/appointment-item-photos/${photoId}`);
+      setPhotos(prev => prev.filter(p => p.id !== photoId));
+      refresh();
+    } catch (err) {
+      showToast.error(err.response?.data?.message || 'No se pudo eliminar la foto');
+    }
+  };
+
+  return (
+    <div className="mt-2">
+      <p className="flex items-center gap-1 mb-1 text-xs font-semibold text-gray-500">
+        <Camera className="w-3.5 h-3.5"/>Evidencia ({photos.length}/{MAX_PHOTOS})
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {photos.map(p => (
+          <PhotoThumb key={p.id} photoId={p.id} onDelete={canEdit ? () => handleDelete(p.id) : undefined}/>
+        ))}
+        {canEdit && left > 0 && (
+          <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
+            className="flex flex-col items-center justify-center w-20 h-20 text-xs text-gray-400 border-2 border-gray-300 border-dashed rounded-lg hover:border-teal-400 hover:text-teal-600 disabled:opacity-50">
+            {busy
+              ? <div className="w-5 h-5 border-2 rounded-full border-t-teal-500 animate-spin"/>
+              : <><Camera className="w-5 h-5 mb-0.5"/>Agregar</>}
+          </button>
+        )}
+      </div>
+      <input ref={inputRef} type="file" accept="image/*" multiple hidden onChange={handleAdd}/>
+    </div>
+  );
+};
+
+// ─── Selector de fotos en el formulario (antes de registrar) ──────────────────
+const PhotoPicker = ({ files, onChange }) => {
+  const inputRef = useRef(null);
+  const previews = useMemo(() => files.map(f => URL.createObjectURL(f)), [files]);
+  useEffect(() => () => previews.forEach(u => URL.revokeObjectURL(u)), [previews]);
+  const left = MAX_PHOTOS - files.length;
+
+  return (
+    <div>
+      <label className="block mb-1 text-xs font-semibold text-gray-500">
+        Fotos de evidencia <span className="font-normal text-gray-400">(opcional, máx. {MAX_PHOTOS} — las verá el proveedor)</span>
+      </label>
+      <div className="flex flex-wrap gap-2">
+        {previews.map((src, i) => (
+          <div key={src} className="relative w-20 h-20 overflow-hidden border-2 border-gray-200 rounded-lg">
+            <img src={src} alt="Vista previa" className="object-cover w-full h-full"/>
+            <button type="button" onClick={() => onChange(files.filter((_, j) => j !== i))} title="Quitar"
+              className="absolute flex items-center justify-center w-5 h-5 text-white rounded-full top-1 right-1 bg-black/60 hover:bg-red-600">
+              <X className="w-3 h-3"/>
+            </button>
+          </div>
+        ))}
+        {left > 0 && (
+          <button type="button" onClick={() => inputRef.current?.click()}
+            className="flex flex-col items-center justify-center w-20 h-20 text-xs text-gray-400 border-2 border-gray-300 border-dashed rounded-lg hover:border-teal-400 hover:text-teal-600">
+            <Camera className="w-5 h-5 mb-0.5"/>Agregar
+          </button>
+        )}
+      </div>
+      <input ref={inputRef} type="file" accept="image/*" multiple hidden
+        onChange={e => {
+          const nuevos = Array.from(e.target.files || []);
+          e.target.value = '';
+          onChange([...files, ...nuevos].slice(0, MAX_PHOTOS));
+        }}/>
+    </div>
+  );
+};
+
+// ─── Detalle de un ítem ya recibido (modal y tarjeta del historial) ──────────
+const ItemResultCard = ({ item, canEditPhotos = true }) => {
+  const rec  = parseFloat(item.quantity_received) || 0;
+  const rej  = parseFloat(item.quantity_rejected) || 0;
+  const acc  = Math.max(0, rec - rej);
+  const abbr = item.received_unit?.abbreviation || item.unit?.abbreviation || '';
+  const s    = item.reception_status;
+
+  const notes = (
+    <>
+      {item.provider_notes && (
+        <p className="mt-1.5 text-xs text-blue-800 flex items-start gap-1">
+          <Eye className="w-3 h-3 mt-0.5 flex-shrink-0 text-blue-500"/>
+          <span><span className="font-semibold">Para el proveedor:</span> {item.provider_notes}</span>
+        </p>
+      )}
+      {item.reception_notes && (
+        <p className="flex items-start gap-1 mt-1 text-xs text-gray-600">
+          <Lock className="w-3 h-3 mt-0.5 flex-shrink-0 text-gray-400"/>
+          <span><span className="font-semibold">Interna:</span> <span className="italic">{item.reception_notes}</span></span>
+        </p>
+      )}
+    </>
+  );
+
+  if (s === 'not_delivered') {
+    return (
+      <div className="p-3 border rounded-xl border-slate-300 bg-slate-50">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-slate-500 line-through flex items-center gap-1.5">
+            {item.product_type === 'product'
+              ? <Package className="w-3.5 h-3.5 text-slate-400"/>
+              : <Wrench   className="w-3.5 h-3.5 text-slate-400"/>}
+            {item.product_name}
+          </p>
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">No entregado</span>
+        </div>
+        {notes}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`p-3 rounded-xl border ${
+      s === 'rejected' ? 'border-red-200 bg-red-50' :
+      s === 'partial'  ? 'border-amber-200 bg-amber-50' :
+      'border-teal-200 bg-teal-50'
+    }`}>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+          {item.product_type === 'product'
+            ? <Package className="w-3.5 h-3.5 text-primary-500"/>
+            : <Wrench   className="w-3.5 h-3.5 text-teal-500"/>}
+          {item.product_name}
+        </p>
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+          s === 'rejected' ? 'bg-red-100 text-red-700' :
+          s === 'partial'  ? 'bg-amber-100 text-amber-700' :
+          'bg-teal-100 text-teal-700'
+        }`}>
+          {s === 'rejected' ? 'Rechazado' : s === 'partial' ? 'Parcial' : 'Aceptado'}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="text-center"><p className="text-xs text-blue-500">Llegó</p><p className="text-xs font-bold text-blue-800">{rec} {abbr}</p></div>
+        <div className="text-center"><p className="text-xs text-green-500">Aceptado</p><p className="text-xs font-bold text-green-800">{acc.toFixed(2)} {abbr}</p></div>
+        <div className="text-center"><p className="text-xs text-red-500">Devuelto</p><p className="text-xs font-bold text-red-800">{rej.toFixed(2)} {abbr}</p></div>
+      </div>
+      {item.rejection_reason_label && <p className="mt-1 text-xs text-gray-500">Motivo: {item.rejection_reason_label}</p>}
+      {notes}
+      <ItemPhotos item={item} canEdit={canEditPhotos}/>
+    </div>
+  );
+};
 
 // ─── Helpers de color ─────────────────────────────────────────────────────────
 const getAppointmentColor = (a) => {
@@ -95,6 +440,7 @@ const ItemReceptionRow = ({ item, units, onChange }) => {
   const selectedUnit = units.find(u => u.id === parseInt(item.received_unit_id));
   const unitAbbr = selectedUnit?.abbreviation || '';
   const notDelivered = !!item.not_delivered;
+  const providerNotesRequired = qtyRej > 0 && !notDelivered;
 
   return (
     <div className={`p-4 rounded-xl border-2 space-y-3 ${
@@ -195,15 +541,22 @@ const ItemReceptionRow = ({ item, units, onChange }) => {
         </>
       )}
 
+      {/* ✅ Observaciones para el proveedor (las ve en su portal) */}
       <div>
         <label className="block mb-1 text-xs font-semibold text-gray-500">
-          Observaciones {qtyRej > 0 && !notDelivered ? <span className="text-red-500">*</span> : <span className="font-normal text-gray-400">(opcional)</span>}
+          Observaciones para el proveedor {providerNotesRequired ? <span className="text-red-500">*</span> : <span className="font-normal text-gray-400">(opcional)</span>}
         </label>
-        <textarea value={item.reception_notes} onChange={e => onChange('reception_notes', e.target.value)}
+        <textarea value={item.provider_notes} onChange={e => onChange('provider_notes', e.target.value)}
           rows={2} maxLength={500}
-          placeholder={notDelivered ? 'Motivo por el que no se entregó...' : qtyRej > 0 ? 'Describe el problema...' : 'Condiciones, temperatura, observaciones...'}
-          className="w-full px-3 py-2 text-sm border-2 border-gray-200 resize-none rounded-xl focus:outline-none focus:border-teal-400"/>
+          placeholder={notDelivered ? 'Ej. No se recibió este producto en la entrega...' : qtyRej > 0 ? 'Explica al proveedor por qué se devolvió...' : 'Comentarios para el proveedor...'}
+          className="w-full px-3 py-2 text-sm border-2 border-blue-200 resize-none rounded-xl focus:outline-none focus:border-blue-400 bg-blue-50/30"/>
+        <p className="mt-0.5 flex items-center gap-1 text-[11px] text-blue-600"><Eye className="w-3 h-3"/>Visible para el proveedor</p>
       </div>
+
+      {/* ✅ Fotos de evidencia */}
+      {!notDelivered && (
+        <PhotoPicker files={item.photos} onChange={files => onChange('photos', files)}/>
+      )}
     </div>
   );
 };
@@ -300,6 +653,12 @@ const ReceptionModal = ({ appointment, onClose, onBack }) => {
   const queryClient = useQueryClient();
   const [globalNotes, setGlobalNotes] = useState('');
   const [error, setError] = useState('');
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  // ✅ Checklist de condiciones: passed null = sin evaluar
+  const [conditions, setConditions] = useState(() =>
+    Object.fromEntries(DELIVERY_CONDITIONS.map(c => [c.key, { passed: null, notes: '' }]))
+  );
+  const updateCondition = (key, value) => setConditions(prev => ({ ...prev, [key]: value }));
  
   const isNoShow                  = appointment.status === 'no_show';
   const needsSecurityConfirmation = !appointment.is_entry_confirmed && !isNoShow;
@@ -324,16 +683,18 @@ const ReceptionModal = ({ appointment, onClose, onBack }) => {
       quantity_rejected: '',
       rejection_reason:  '',
       reception_notes:   '',
+      provider_notes:    '',   // ✅ visible para el proveedor
+      photos:            [],   // ✅ File[] seleccionados, se suben al registrar
       not_delivered:      false,
     }))
   );
  
-  // ✅ updateItem: si se marca not_delivered, limpia los campos de cantidad de ese ítem
+  // ✅ updateItem: si se marca not_delivered, limpia los campos de cantidad (y fotos) de ese ítem
   const updateItem = (idx, field, value) =>
     setItemsState(prev => prev.map((item, i) => {
       if (i !== idx) return item;
       if (field === 'not_delivered' && value === true) {
-        return { ...item, not_delivered: true, quantity_received: '', quantity_rejected: '', rejection_reason: '' };
+        return { ...item, not_delivered: true, quantity_received: '', quantity_rejected: '', rejection_reason: '', photos: [] };
       }
       return { ...item, [field]: value };
     }));
@@ -341,6 +702,11 @@ const ReceptionModal = ({ appointment, onClose, onBack }) => {
   const mutation = useMutation({
     mutationFn: () => appointmentService.registerReception(appointment.id, {
       reception_notes: globalNotes || undefined,
+      delivery_conditions: DELIVERY_CONDITIONS.map(c => ({
+        key:    c.key,
+        passed: conditions[c.key].passed,
+        notes:  conditions[c.key].passed === false ? conditions[c.key].notes.trim() : undefined,
+      })),
       items: itemsState.map(item => ({
         id:                item.id,
         not_delivered:     item.not_delivered || undefined,
@@ -349,14 +715,29 @@ const ReceptionModal = ({ appointment, onClose, onBack }) => {
         quantity_rejected: !item.not_delivered && parseFloat(item.quantity_rejected) > 0 ? item.quantity_rejected : undefined,
         rejection_reason:  !item.not_delivered ? (item.rejection_reason || undefined) : undefined,
         reception_notes:   item.reception_notes || undefined,
+        provider_notes:    item.provider_notes?.trim() || undefined,
       })),
     }),
-    onSuccess: (res) => {
-      queryClient.invalidateQueries(['food-engineer-month']);
-      queryClient.invalidateQueries(['food-engineer-day']);
-      queryClient.invalidateQueries(['food-engineer-week']);
-      queryClient.invalidateQueries(['food-engineer-history']);
-      showToast.success(res.message || 'Recepción registrada');
+    onSuccess: async (res) => {
+      // ✅ La recepción ya quedó guardada; ahora se suben las fotos de cada ítem
+      const withPhotos = itemsState.filter(i => !i.not_delivered && i.photos?.length > 0);
+      let failed = 0;
+      if (withPhotos.length > 0) {
+        setUploadingPhotos(true);
+        for (const it of withPhotos) {
+          try { await uploadItemPhotos(it.id, it.photos); }
+          catch { failed++; }
+        }
+        setUploadingPhotos(false);
+      }
+
+      FOOD_ENGINEER_QUERY_KEYS.forEach(k => queryClient.invalidateQueries([k]));
+
+      if (failed > 0) {
+        showToast.error(`Recepción registrada, pero ${failed} producto${failed > 1 ? 's' : ''} no subi${failed > 1 ? 'eron' : 'ó'} sus fotos. Puedes agregarlas desde el resumen de la recepción.`);
+      } else {
+        showToast.success(res.message || 'Recepción registrada');
+      }
       onClose();
     },
     onError: (err) => {
@@ -368,6 +749,11 @@ const ReceptionModal = ({ appointment, onClose, onBack }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     setError('');
+    for (const c of DELIVERY_CONDITIONS) {
+      const v = conditions[c.key];
+      if (v.passed === null)                    { setError(`Condiciones de la entrega: evalúa "${c.label}"`); return; }
+      if (v.passed === false && !v.notes.trim()) { setError(`Condiciones de la entrega: escribe la observación de "${c.label}"`); return; }
+    }
     for (let i = 0; i < itemsState.length; i++) {
       const item = itemsState[i];
       if (item.not_delivered) continue; // ✅ se omite la validación de cantidades
@@ -377,7 +763,7 @@ const ReceptionModal = ({ appointment, onClose, onBack }) => {
       if (!item.received_unit_id)                   { setError(`"${item.product_name}": selecciona la unidad`); return; }
       if (qtyRej > qtyRec)                          { setError(`"${item.product_name}": la cantidad devuelta no puede superar la recibida`); return; }
       if (qtyRej > 0 && !item.rejection_reason)     { setError(`"${item.product_name}": selecciona el motivo del rechazo`); return; }
-      if (qtyRej > 0 && !item.reception_notes?.trim()) { setError(`"${item.product_name}": las observaciones son obligatorias al rechazar`); return; }
+      if (qtyRej > 0 && !item.provider_notes?.trim()) { setError(`"${item.product_name}": escribe las observaciones para el proveedor (las verá en su portal)`); return; }
     }
     mutation.mutate();
   };
@@ -534,71 +920,19 @@ const ReceptionModal = ({ appointment, onClose, onBack }) => {
                 </div>
               </div>
  
+              <DeliveryConditionsSummary conditions={appointment.delivery_conditions}/>
+
               {/* Detalle por producto */}
               {appointment.items?.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold tracking-wide text-gray-500 uppercase">Detalle por producto</p>
-                  {appointment.items.map(item => {
-                    const rec  = parseFloat(item.quantity_received) || 0;
-                    const rej  = parseFloat(item.quantity_rejected)  || 0;
-                    const acc  = Math.max(0, rec - rej);
-                    const abbr = item.received_unit?.abbreviation || item.unit?.abbreviation || '';
-                    const s    = item.reception_status;
-                    if (s === 'not_delivered') {
-                      return (
-                        <div key={item.id} className="p-3 border rounded-xl border-slate-300 bg-slate-50">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold text-slate-500 line-through flex items-center gap-1.5">
-                              {item.product_type === 'product'
-                                ? <Package className="w-3.5 h-3.5 text-slate-400"/>
-                                : <Wrench   className="w-3.5 h-3.5 text-slate-400"/>}
-                              {item.product_name}
-                            </p>
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                              No entregado
-                            </span>
-                          </div>
-                          {item.reception_notes && <p className="mt-1 text-xs italic text-slate-600">"{item.reception_notes}"</p>}
-                        </div>
-                      );
-                    }
-                    return (
-                      <div key={item.id} className={`p-3 rounded-xl border ${
-                        s === 'rejected' ? 'border-red-200 bg-red-50' :
-                        s === 'partial'  ? 'border-amber-200 bg-amber-50' :
-                        'border-teal-200 bg-teal-50'
-                      }`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                            {item.product_type === 'product'
-                              ? <Package className="w-3.5 h-3.5 text-primary-500"/>
-                              : <Wrench   className="w-3.5 h-3.5 text-teal-500"/>}
-                            {item.product_name}
-                          </p>
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                            s === 'rejected' ? 'bg-red-100 text-red-700' :
-                            s === 'partial'  ? 'bg-amber-100 text-amber-700' :
-                            'bg-teal-100 text-teal-700'
-                          }`}>
-                            {s === 'rejected' ? 'Rechazado' : s === 'partial' ? 'Parcial' : 'Aceptado'}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="text-center"><p className="text-xs text-blue-500">Llegó</p><p className="text-xs font-bold text-blue-800">{rec} {abbr}</p></div>
-                          <div className="text-center"><p className="text-xs text-green-500">Aceptado</p><p className="text-xs font-bold text-green-800">{acc.toFixed(2)} {abbr}</p></div>
-                          <div className="text-center"><p className="text-xs text-red-500">Devuelto</p><p className="text-xs font-bold text-red-800">{rej.toFixed(2)} {abbr}</p></div>
-                        </div>
-                        {item.rejection_reason_label && <p className="mt-1 text-xs text-gray-500">Motivo: {item.rejection_reason_label}</p>}
-                        {item.reception_notes && <p className="mt-1 text-xs italic text-gray-600">"{item.reception_notes}"</p>}
-                      </div>
-                    );
-                  })}
+                  {appointment.items.map(item => <ItemResultCard key={item.id} item={item}/>)}
                 </div>
               )}
  
               {appointment.reception_notes && (
                 <div className="p-3 border border-gray-200 rounded-xl bg-gray-50">
-                  <p className="mb-1 text-xs font-semibold text-gray-500">Observaciones generales</p>
+                  <p className="flex items-center gap-1 mb-1 text-xs font-semibold text-gray-500"><Lock className="w-3 h-3"/>Observaciones generales (internas)</p>
                   <p className="text-sm text-gray-700">{appointment.reception_notes}</p>
                 </div>
               )}
@@ -613,6 +947,23 @@ const ReceptionModal = ({ appointment, onClose, onBack }) => {
           {/* ── Estado 4: Formulario normal ── */}
           {!isNoShow && !needsSecurityConfirmation && !isAlreadyReviewed && (
             <form onSubmit={handleSubmit} className="space-y-4">
+              <DeliveryConditionsForm value={conditions} onChange={updateCondition}
+                securityRef={(() => {
+                  const docs = appointment.physical_docs_status || [];
+                  if (!docs.length) return null;
+                  const missing = docs.filter(d => d.required && d.missing).map(d => d.label);
+                  return (
+                    <p className={`mt-2 flex items-start gap-1 text-[11px] ${missing.length ? 'text-amber-700' : 'text-gray-500'}`}>
+                      <Shield className="w-3 h-3 mt-0.5 flex-shrink-0"/>
+                      <span>
+                        {missing.length
+                          ? <>Referencia de Seguridad: faltó {missing.join(', ')}</>
+                          : <>Referencia de Seguridad: documentos obligatorios completos en la entrada</>}
+                        <span className="text-gray-400"> (no la ve el proveedor)</span>
+                      </span>
+                    </p>
+                  );
+                })()}/>
               {itemsState.length === 0 ? (
                 <div className="p-6 text-center text-gray-400 border-2 border-gray-200 border-dashed rounded-xl">
                   <Package className="w-10 h-10 mx-auto mb-2 opacity-50"/>
@@ -626,11 +977,12 @@ const ReceptionModal = ({ appointment, onClose, onBack }) => {
               )}
               <div>
                 <label className="block mb-1.5 text-sm font-semibold text-gray-700">
-                  Observaciones generales <span className="font-normal text-gray-400">(opcional)</span>
+                  Observaciones generales internas <span className="font-normal text-gray-400">(opcional)</span>
                 </label>
                 <textarea value={globalNotes} onChange={e => setGlobalNotes(e.target.value)}
                   rows={2} maxLength={2000} placeholder="Condiciones generales de la entrega..."
                   className="w-full px-3 py-2.5 text-sm border-2 border-gray-200 rounded-xl focus:outline-none focus:border-teal-400 resize-none"/>
+                <p className="mt-0.5 flex items-center gap-1 text-[11px] text-gray-400"><Lock className="w-3 h-3"/>Solo visible para DASAVENA</p>
               </div>
               {error && (
                 <div className="flex items-start gap-2 p-3 border border-red-200 rounded-xl bg-red-50">
@@ -650,7 +1002,7 @@ const ReceptionModal = ({ appointment, onClose, onBack }) => {
                     hasAnyRejection ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600' :
                     'bg-gradient-to-r from-teal-500 to-green-500 hover:from-teal-600 hover:to-green-600'
                   }`}>
-                  {allRejected ? 'Registrar rechazo total' : hasAnyRejection ? 'Registrar con devoluciones' : 'Registrar recepción'}
+                  {uploadingPhotos ? 'Subiendo fotos...' : allRejected ? 'Registrar rechazo total' : hasAnyRejection ? 'Registrar con devoluciones' : 'Registrar recepción'}
                 </Button>
                 <Button type="button" variant="ghost" onClick={onClose} disabled={mutation.isPending}>Cerrar</Button>
               </div>
@@ -727,51 +1079,12 @@ const DeliveryCard = ({ appointment, onRegister, isPast = false }) => {
 
       {expanded && isReviewed && hasItems && (
         <div className="px-4 pt-3 pb-4 space-y-2 border-t border-gray-100">
+          <DeliveryConditionsSummary conditions={appointment.delivery_conditions}/>
           <p className="mb-2 text-xs font-semibold tracking-wide text-gray-500 uppercase">Detalle por producto</p>
-          {appointment.items.map(item => {
-            const rec  = parseFloat(item.quantity_received) || 0;
-            const rej  = parseFloat(item.quantity_rejected) || 0;
-            const acc  = Math.max(0, rec - rej);
-            const abbr = item.received_unit?.abbreviation || item.unit?.abbreviation || '';
-            const s    = item.reception_status;
-            if (s === 'not_delivered') {
-              return (
-                <div key={item.id} className="p-3 border rounded-xl border-slate-300 bg-slate-50">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-500 line-through flex items-center gap-1.5">
-                      {item.product_type==='product'?<Package className="w-3.5 h-3.5 text-slate-400"/>:<Wrench className="w-3.5 h-3.5 text-slate-400"/>}
-                      {item.product_name}
-                    </p>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">No entregado</span>
-                  </div>
-                  {item.reception_notes && <p className="mt-1 text-xs italic text-slate-600">"{item.reception_notes}"</p>}
-                </div>
-              );
-            }
-            return (
-              <div key={item.id} className={`p-3 rounded-xl border ${s==='rejected'?'border-red-200 bg-red-50':s==='partial'?'border-amber-200 bg-amber-50':'border-teal-200 bg-teal-50'}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                    {item.product_type==='product'?<Package className="w-3.5 h-3.5 text-primary-500"/>:<Wrench className="w-3.5 h-3.5 text-teal-500"/>}
-                    {item.product_name}
-                  </p>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${s==='rejected'?'bg-red-100 text-red-700':s==='partial'?'bg-amber-100 text-amber-700':'bg-teal-100 text-teal-700'}`}>
-                    {s==='rejected'?'Rechazado':s==='partial'?'Parcial':'Aceptado'}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="text-center"><p className="text-xs text-blue-500">Llegó</p><p className="text-xs font-bold text-blue-800">{rec} {abbr}</p></div>
-                  <div className="text-center"><p className="text-xs text-green-500">Acepta</p><p className="text-xs font-bold text-green-800">{acc.toFixed(2)} {abbr}</p></div>
-                  <div className="text-center"><p className="text-xs text-red-500">Devuelve</p><p className="text-xs font-bold text-red-800">{rej.toFixed(2)} {abbr}</p></div>
-                </div>
-                {item.rejection_reason_label && <p className="mt-1 text-xs text-gray-500">Motivo: {item.rejection_reason_label}</p>}
-                {item.reception_notes && <p className="mt-1 text-xs italic text-gray-600">"{item.reception_notes}"</p>}
-              </div>
-            );
-          })}
+          {appointment.items.map(item => <ItemResultCard key={item.id} item={item}/>)}
           {appointment.reception_notes && (
             <div className="p-3 border border-gray-200 rounded-xl bg-gray-50">
-              <p className="mb-1 text-xs font-semibold text-gray-500">Observaciones generales</p>
+              <p className="flex items-center gap-1 mb-1 text-xs font-semibold text-gray-500"><Lock className="w-3 h-3"/>Observaciones generales (internas)</p>
               <p className="text-sm text-gray-700">{appointment.reception_notes}</p>
             </div>
           )}
