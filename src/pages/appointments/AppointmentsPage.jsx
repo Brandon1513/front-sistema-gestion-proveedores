@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { appointmentService } from '../../api/appointmentService';
 import { providerService } from '../../api/providerService';
@@ -12,6 +12,7 @@ import {
   LayoutGrid, List, Tag, Paperclip, AlertCircle, Truck,
   User, Info, ShieldCheck, ShieldX, Timer, Package,
   Wrench, Trash2, FlaskConical, RefreshCw, Ban,
+  ClipboardCheck, Camera, Eye, Lock,
 } from 'lucide-react';
 
 const DAYS   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
@@ -48,6 +49,159 @@ const calcEndTime = (startTime, durationMins) => {
   const [h, m] = clean.split(':').map(Number);
   const total  = h * 60 + m + Number(durationMins);
   return `${String(Math.floor(total / 60)).padStart(2,'0')}:${String(total % 60).padStart(2,'0')}`;
+};
+
+// ─── ✅ Recepción (registrada por el ingeniero de alimentos) ──────────────────
+const RECEPTION_CONFIG = {
+  accepted:      { title: 'Recepción aceptada completa',          box: 'border-teal-200 bg-teal-50',   text: 'text-teal-800',  Icon: CheckCircle },
+  partial:       { title: 'Recepción parcial — con devoluciones', box: 'border-amber-200 bg-amber-50', text: 'text-amber-800', Icon: AlertCircle },
+  rejected:      { title: 'Recepción rechazada',                  box: 'border-red-200 bg-red-50',     text: 'text-red-800',   Icon: XCircle     },
+  not_delivered: { title: 'El proveedor no trajo ningún producto',box: 'border-slate-300 bg-slate-50', text: 'text-slate-700', Icon: XCircle     },
+};
+
+// Recepción con devoluciones o alguna condición de la entrega que no cumplió
+const hasReceptionIssues = (a) =>
+  a.is_reception_reviewed && (['rejected', 'partial'].includes(a.reception_status) || a.has_failed_conditions);
+
+// Foto de evidencia (solo lectura, se pide con el token como blob)
+const PhotoThumb = ({ photoId }) => {
+  const [src, setSrc] = useState(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let objectUrl; let alive = true;
+    api.get(`/appointment-item-photos/${photoId}`, { responseType: 'blob' })
+      .then(res => { if (!alive) return; objectUrl = URL.createObjectURL(res.data); setSrc(objectUrl); })
+      .catch(() => alive && setFailed(true));
+    return () => { alive = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [photoId]);
+  return (
+    <div className="w-16 h-16 overflow-hidden bg-gray-100 border-2 border-gray-200 rounded-lg">
+      {src ? (
+        <a href={src} target="_blank" rel="noreferrer" title="Ver foto completa"><img src={src} alt="Evidencia" className="object-cover w-full h-full"/></a>
+      ) : failed ? (
+        <div className="flex items-center justify-center w-full h-full p-1 text-[10px] text-center text-gray-400">No disponible</div>
+      ) : (
+        <div className="flex items-center justify-center w-full h-full"><div className="w-4 h-4 border-2 rounded-full border-t-primary-500 animate-spin"/></div>
+      )}
+    </div>
+  );
+};
+
+const DeliveryConditionsSummary = ({ conditions }) => {
+  if (!conditions?.length) return null;
+  const failed = conditions.filter(c => !c.passed).length;
+  return (
+    <div className="p-3 space-y-1.5 bg-white border border-gray-200 rounded-xl">
+      <div className="flex items-center justify-between">
+        <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-600"><ClipboardCheck className="w-3.5 h-3.5"/>Condiciones de la entrega</p>
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${failed ? 'bg-red-100 text-red-700' : 'bg-teal-100 text-teal-700'}`}>
+          {failed ? `${failed} no cumple${failed > 1 ? 'n' : ''}` : 'Todo cumple'}
+        </span>
+      </div>
+      {conditions.map(c => (
+        <div key={c.key}>
+          <p className="flex items-center gap-1.5 text-sm text-gray-800">
+            {c.passed ? <CheckCircle className="flex-shrink-0 w-4 h-4 text-teal-500"/> : <XCircle className="flex-shrink-0 w-4 h-4 text-red-500"/>}
+            {c.label}
+          </p>
+          {!c.passed && c.notes && <p className="ml-5 text-xs text-red-700">{c.notes}</p>}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const ReceptionItemResult = ({ item }) => {
+  const s    = item.reception_status;
+  const rec  = parseFloat(item.quantity_received) || 0;
+  const rej  = parseFloat(item.quantity_rejected) || 0;
+  const acc  = Math.max(0, rec - rej);
+  const abbr = item.received_unit?.abbreviation || item.unit?.abbreviation || '';
+  const ProductIcon = item.product_type === 'service' ? Wrench : Package;
+  const photos = item.photos || [];
+
+  const notes = (
+    <>
+      {item.provider_notes && (
+        <p className="mt-1.5 flex items-start gap-1 text-xs text-blue-800">
+          <Eye className="w-3 h-3 mt-0.5 flex-shrink-0 text-blue-500"/>
+          <span><span className="font-semibold">Para el proveedor:</span> {item.provider_notes}</span>
+        </p>
+      )}
+      {item.reception_notes && (
+        <p className="flex items-start gap-1 mt-1 text-xs text-gray-600">
+          <Lock className="w-3 h-3 mt-0.5 flex-shrink-0 text-gray-400"/>
+          <span><span className="font-semibold">Interna:</span> <span className="italic">{item.reception_notes}</span></span>
+        </p>
+      )}
+    </>
+  );
+
+  if (s === 'not_delivered') {
+    return (
+      <div className="p-3 border rounded-xl border-slate-300 bg-slate-50">
+        <div className="flex items-center justify-between">
+          <p className="flex items-center gap-1.5 text-sm font-semibold line-through text-slate-500"><ProductIcon className="w-3.5 h-3.5 text-slate-400"/>{item.product_name}</p>
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">No entregado</span>
+        </div>
+        {notes}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`p-3 rounded-xl border ${s === 'rejected' ? 'border-red-200 bg-red-50' : s === 'partial' ? 'border-amber-200 bg-amber-50' : 'border-teal-200 bg-teal-50'}`}>
+      <div className="flex items-center justify-between mb-2">
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-800"><ProductIcon className="w-3.5 h-3.5 text-primary-500"/>{item.product_name}</p>
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${s === 'rejected' ? 'bg-red-100 text-red-700' : s === 'partial' ? 'bg-amber-100 text-amber-700' : 'bg-teal-100 text-teal-700'}`}>
+          {s === 'rejected' ? 'Rechazado' : s === 'partial' ? 'Parcial' : 'Aceptado'}
+        </span>
+      </div>
+      <div className="grid grid-cols-4 gap-2">
+        <div className="text-center"><p className="text-xs text-gray-500">Esperado</p><p className="text-xs font-bold text-gray-700">{item.quantity_expected ? `${item.quantity_expected} ${item.unit?.abbreviation || ''}` : '—'}</p></div>
+        <div className="text-center"><p className="text-xs text-blue-500">Llegó</p><p className="text-xs font-bold text-blue-800">{rec} {abbr}</p></div>
+        <div className="text-center"><p className="text-xs text-green-500">Aceptado</p><p className="text-xs font-bold text-green-800">{acc.toFixed(2)} {abbr}</p></div>
+        <div className="text-center"><p className="text-xs text-red-500">Devuelto</p><p className="text-xs font-bold text-red-800">{rej.toFixed(2)} {abbr}</p></div>
+      </div>
+      {item.rejection_reason_label && <p className="mt-1.5 text-xs text-gray-600">Motivo: <span className="font-semibold">{item.rejection_reason_label}</span></p>}
+      {notes}
+      {photos.length > 0 && (
+        <div className="mt-2">
+          <p className="flex items-center gap-1 mb-1 text-xs font-semibold text-gray-500"><Camera className="w-3.5 h-3.5"/>Evidencia</p>
+          <div className="flex flex-wrap gap-2">{photos.map(p => <PhotoThumb key={p.id} photoId={p.id}/>)}</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ReceptionDetail = ({ appointment }) => {
+  if (!appointment.is_reception_reviewed) return null;
+  const cfg   = RECEPTION_CONFIG[appointment.reception_status] || RECEPTION_CONFIG.accepted;
+  const items = appointment.items || [];
+  return (
+    <div className="space-y-2">
+      <p className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-gray-500 uppercase"><FlaskConical className="w-3.5 h-3.5"/>Recepción de producto</p>
+      <div className={`flex items-center gap-3 p-3 rounded-xl border-2 ${cfg.box}`}>
+        <cfg.Icon className={`w-5 h-5 flex-shrink-0 ${cfg.text}`}/>
+        <div>
+          <p className={`text-sm font-bold ${cfg.text}`}>{cfg.title}</p>
+          <p className="text-xs text-gray-500">
+            {appointment.reception_reviewed_by ? `Registrada por ${appointment.reception_reviewed_by}` : 'Registrada'}
+            {appointment.reception_reviewed_at ? ` · ${appointment.reception_reviewed_at}` : ''}
+          </p>
+        </div>
+      </div>
+      <DeliveryConditionsSummary conditions={appointment.delivery_conditions}/>
+      {items.map(item => <ReceptionItemResult key={item.id} item={item}/>)}
+      {appointment.reception_notes && (
+        <div className="p-3 border border-gray-200 rounded-xl bg-gray-50">
+          <p className="flex items-center gap-1 mb-1 text-xs font-semibold text-gray-500"><Lock className="w-3 h-3"/>Observaciones generales (internas)</p>
+          <p className="text-sm text-gray-700">{appointment.reception_notes}</p>
+        </div>
+      )}
+    </div>
+  );
 };
 
 // ─── Hook elegibilidad ────────────────────────────────────────────────────────
@@ -379,6 +533,7 @@ const DetailModal = ({ appointment, onClose, onEdit, onReschedule }) => {
   const StatusIcon = cfg.icon;
   const endTime    = appointment.end_time || calcEndTime(appointment.appointment_time?.slice(0,5), appointment.duration_minutes);
   const hasItems   = appointment.items?.length > 0;
+  const physicalDocs = appointment.physical_docs_status || [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -457,6 +612,8 @@ const DetailModal = ({ appointment, onClose, onEdit, onReschedule }) => {
               <p className="flex items-center gap-1 text-xs font-semibold text-green-700"><CheckCircle className="w-3.5 h-3.5"/>Proveedor completó su información</p>
               {appointment.vehicle_display && <div className="flex items-center gap-2"><Truck className="w-4 h-4 text-green-600"/><p className="text-sm text-green-800">{appointment.vehicle_display}</p></div>}
               {appointment.driver_display  && <div className="flex items-center gap-2"><User  className="w-4 h-4 text-green-600"/><p className="text-sm text-green-800">{appointment.driver_display}</p></div>}
+              {/* ✅ Notas que dejó el proveedor */}
+              {appointment.provider_notes && <p className="text-sm italic text-green-700 border-t border-green-200 pt-1.5">"{appointment.provider_notes}"</p>}
             </div>
           ) : appointment.status !== 'no_show' && appointment.status !== 'cancelled' && (
             <div className="flex items-center gap-2 p-3 border rounded-xl bg-amber-50 border-amber-200">
@@ -466,15 +623,40 @@ const DetailModal = ({ appointment, onClose, onEdit, onReschedule }) => {
           )}
 
           {appointment.is_entry_confirmed && (
-            <div className="p-3 space-y-1 border border-green-200 rounded-xl bg-green-50">
-              <p className="flex items-center gap-1 text-xs font-semibold text-green-700"><ShieldCheck className="w-3.5 h-3.5"/>Entrada confirmada</p>
+            <div className="p-3 space-y-2 border border-green-200 rounded-xl bg-green-50">
+              <p className="flex items-center gap-1 text-xs font-semibold text-green-700"><ShieldCheck className="w-3.5 h-3.5"/>Entrada confirmada por Seguridad</p>
               <div className="flex flex-wrap items-center gap-3">
                 <span className="flex items-center gap-1 text-xs text-green-600"><Timer className="w-3.5 h-3.5"/>Llegó: {appointment.actual_arrival_time?.slice(0,5)} hrs</span>
                 {appointment.arrived_on_time === false && <span className="text-xs font-semibold text-orange-600">⚠️ Retraso: {appointment.delay_minutes} min</span>}
                 {appointment.arrived_on_time === true  && <span className="text-xs font-semibold text-green-600">✅ A tiempo</span>}
               </div>
+              {/* ✅ Quién confirmó */}
+              {appointment.entry_confirmed_by_name && (
+                <p className="flex items-center gap-1 text-xs text-green-700"><User className="w-3.5 h-3.5"/>Registró: {appointment.entry_confirmed_by_name}{appointment.entry_confirmed_at ? ` · ${appointment.entry_confirmed_at} hrs` : ''}</p>
+              )}
+              {/* ✅ Checklist de documentos físicos */}
+              {physicalDocs.length > 0 && (
+                <div className="pt-2 border-t border-green-200">
+                  <p className="mb-1 text-xs font-semibold text-gray-600">Documentos presentados {appointment.has_missing_docs && <span className="text-red-600">· faltaron obligatorios</span>}</p>
+                  <div className="space-y-0.5">
+                    {physicalDocs.map(d => (
+                      <p key={d.key} className={`flex items-center gap-1.5 text-xs ${d.present ? 'text-green-800' : d.required ? 'text-red-700' : 'text-gray-500'}`}>
+                        {d.present ? <CheckCircle className="w-3.5 h-3.5 flex-shrink-0"/> : <XCircle className="w-3.5 h-3.5 flex-shrink-0"/>}
+                        {d.label}{!d.required && <span className="text-gray-400"> (opcional)</span>}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* ✅ Notas de Seguridad */}
+              {appointment.entry_notes && (
+                <p className="pt-2 text-xs italic text-green-800 border-t border-green-200">"{appointment.entry_notes}"</p>
+              )}
             </div>
           )}
+
+          {/* ✅ Resultado de la recepción (ingeniero de alimentos) */}
+          <ReceptionDetail appointment={appointment}/>
 
           {appointment.status === 'no_show' && (
             <div className="p-4 space-y-3 border-2 border-orange-300 rounded-xl bg-orange-50">
@@ -937,6 +1119,8 @@ export const AppointmentsPage = () => {
                           <span className="truncate">{a.provider?.business_name}</span>
                           {a.has_missing_docs && <span className="w-1.5 h-1.5 rounded-full bg-red-300 flex-shrink-0"/>}
                           {a.status==='no_show' && <span className="w-1.5 h-1.5 rounded-full bg-orange-300 flex-shrink-0"/>}
+                          {/* ✅ Recepción con incidencias */}
+                          {hasReceptionIssues(a) && <span title="Recepción con incidencias" className="flex-shrink-0 w-2 h-2 bg-red-600 rounded-full ring-1 ring-white"/>}
                         </div>
                       ))}
                       {extra > 0 && <p className="text-xs text-center text-gray-400">+{extra} más</p>}
@@ -1015,6 +1199,7 @@ export const AppointmentsPage = () => {
                             <p className="font-bold leading-tight">{a.appointment_time?.slice(0,5)}{endT ? ` — ${endT}` : ''}</p>
                             <p className="leading-tight truncate">{a.provider?.business_name}</p>
                             {a.status === 'no_show' && <p className="text-orange-200 text-[10px]">● No llegó</p>}
+                            {hasReceptionIssues(a) && <p className="text-red-100 text-[10px] font-semibold">● Recepción con incidencias</p>}
                           </div>
                         );
                       })}
@@ -1032,6 +1217,7 @@ export const AppointmentsPage = () => {
         {TYPE_OPTIONS.map(t => <span key={t.value} className="flex items-center gap-1.5 text-xs font-medium text-gray-600"><span className={`w-3 h-3 rounded-full ${t.color}`}/>{t.label}</span>)}
         <span className="flex items-center gap-1.5 text-xs font-medium text-red-500 ml-4"><Ban className="w-3 h-3"/>Espacio bloqueado</span>
         <span className="flex items-center gap-1.5 text-xs font-medium text-orange-500"><span className="w-2 h-2 bg-orange-400 rounded-full"/>No se presentó</span>
+        <span className="flex items-center gap-1.5 text-xs font-medium text-red-700"><span className="w-2 h-2 bg-red-600 rounded-full"/>Recepción con incidencias</span>
       </div>
 
       {/* Modales */}
