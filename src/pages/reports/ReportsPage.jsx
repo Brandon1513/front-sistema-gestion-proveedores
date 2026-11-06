@@ -8,6 +8,7 @@ import { showToast } from '../../utils/toast';
 import {
   FileSpreadsheet, Download, Filter, Building2, Calendar, Tag, RotateCcw,
   Eye, RefreshCw, AlertCircle, ShieldCheck, ShieldAlert, ShieldX,
+  Timer, UserX, ClipboardCheck, CheckCircle,
 } from 'lucide-react';
 
 const STATUS_OPTIONS = [
@@ -26,6 +27,13 @@ const RECEPTION_STATUS_OPTIONS = [
   { value: 'partial',       label: 'Parcial' },
   { value: 'rejected',      label: 'Rechazado' },
   { value: 'not_delivered', label: 'No entregado' },
+];
+
+// ✅ Puntualidad (registrada por Seguridad al confirmar la entrada)
+const PUNCTUALITY_OPTIONS = [
+  { value: '',        label: 'Todas' },
+  { value: 'on_time', label: 'A tiempo' },
+  { value: 'late',    label: 'Con retraso' },
 ];
 
 const PROVIDER_STATUS_OPTIONS = [
@@ -56,16 +64,36 @@ const RECEPTION_BADGE = {
   not_delivered: 'bg-slate-200 text-slate-700',
 };
 
+const EMPTY_APPOINTMENT_FILTERS = { date_from: '', date_to: '', provider_id: '', status: '', reception_status: '', punctuality: '' };
+
 const cleanParams = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== ''));
 const fmtDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+
+// ─── Indicador del periodo ────────────────────────────────────────────────────
+// Clases completas (no armadas con template strings) para que Tailwind las genere
+const SUMMARY_COLORS = {
+  emerald: { border: 'border-emerald-200', icon: 'text-emerald-500', value: 'text-emerald-600' },
+  amber:   { border: 'border-amber-200',   icon: 'text-amber-500',   value: 'text-amber-600'   },
+  orange:  { border: 'border-orange-200',  icon: 'text-orange-500',  value: 'text-orange-600'  },
+  red:     { border: 'border-red-200',     icon: 'text-red-500',     value: 'text-red-600'     },
+};
+
+const SummaryCard = ({ icon: Icon, label, value, detail, color }) => {
+  const c = SUMMARY_COLORS[color] || SUMMARY_COLORS.emerald;
+  return (
+    <div className={`p-4 bg-white border-2 rounded-xl ${c.border}`}>
+      <p className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-gray-500 uppercase"><Icon className={`w-3.5 h-3.5 ${c.icon}`}/>{label}</p>
+      <p className={`mt-1 text-2xl font-bold ${c.value}`}>{value}</p>
+      {detail && <p className="text-xs text-gray-500">{detail}</p>}
+    </div>
+  );
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ── Sección 1: Reporte de Citas / Recepciones ───────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
 const AppointmentsReportSection = () => {
-  const [filters, setFilters] = useState({
-    date_from: '', date_to: '', provider_id: '', status: '', reception_status: '',
-  });
+  const [filters, setFilters] = useState(EMPTY_APPOINTMENT_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState(null);
 
   const { data: providersData } = useQuery({
@@ -76,7 +104,7 @@ const AppointmentsReportSection = () => {
   const providers = providersData?.data || providersData?.providers || [];
 
   const set = (key, val) => setFilters(f => ({ ...f, [key]: val }));
-  const clearFilters = () => { setFilters({ date_from: '', date_to: '', provider_id: '', status: '', reception_status: '' }); setAppliedFilters(null); };
+  const clearFilters = () => { setFilters(EMPTY_APPOINTMENT_FILTERS); setAppliedFilters(null); };
 
   const { data: previewData, isFetching: previewLoading } = useQuery({
     queryKey: ['report-preview-appointments', appliedFilters],
@@ -94,6 +122,7 @@ const AppointmentsReportSection = () => {
   const rows    = previewData?.rows    || [];
   const total   = previewData?.total   ?? 0;
   const showing = previewData?.showing ?? 0;
+  const summary = previewData?.summary;
 
   return (
     <div className="overflow-hidden bg-white border-2 border-gray-200 rounded-xl">
@@ -101,7 +130,7 @@ const AppointmentsReportSection = () => {
         <FileSpreadsheet className="w-5 h-5 text-emerald-600"/>
         <div>
           <h2 className="font-bold text-gray-900">Reporte de Citas y Recepciones</h2>
-          <p className="text-xs text-gray-500">Incluye estado de cada cita, entrada, recepción y detalle por producto</p>
+          <p className="text-xs text-gray-500">Incluye estado de cada cita, entrada, puntualidad, recepción, condiciones de la entrega y detalle por producto</p>
         </div>
       </div>
 
@@ -149,6 +178,13 @@ const AppointmentsReportSection = () => {
               {RECEPTION_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
+          <div>
+            <label className="block mb-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide"><Timer className="inline w-3.5 h-3.5 mr-1"/>Puntualidad</label>
+            <select value={filters.punctuality} onChange={e => set('punctuality', e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border-2 border-gray-200 rounded-xl focus:outline-none focus:border-emerald-400">
+              {PUNCTUALITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -162,7 +198,23 @@ const AppointmentsReportSection = () => {
         </div>
 
         {appliedFilters && (
-          <div className="pt-2">
+          <div className="pt-2 space-y-4">
+            {/* ✅ Indicadores del periodo filtrado (sobre todas las citas, no solo la vista previa) */}
+            {!previewLoading && summary && total > 0 && (
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <SummaryCard icon={Timer} color="emerald" label="Entregas a tiempo"
+                  value={summary.on_time_pct !== null ? `${summary.on_time_pct}%` : '—'}
+                  detail={summary.entries > 0 ? `${summary.on_time} de ${summary.entries} con entrada confirmada` : 'Sin entradas confirmadas'}/>
+                <SummaryCard icon={AlertCircle} color="amber" label="Con retraso"
+                  value={summary.late}
+                  detail={summary.avg_delay_minutes !== null ? `Retraso promedio: ${summary.avg_delay_minutes} min` : null}/>
+                <SummaryCard icon={UserX} color="orange" label="No se presentó" value={summary.no_show}/>
+                <SummaryCard icon={ClipboardCheck} color="red" label="Condiciones no cumplidas"
+                  value={summary.conditions_with_failures}
+                  detail={summary.conditions_evaluated > 0 ? `de ${summary.conditions_evaluated} recepciones evaluadas` : 'Sin recepciones evaluadas'}/>
+              </div>
+            )}
+
             {previewLoading ? (
               <div className="flex items-center justify-center py-10 border-2 border-gray-100 rounded-xl">
                 <RefreshCw className="w-5 h-5 mr-2 text-gray-400 animate-spin"/>
@@ -187,10 +239,13 @@ const AppointmentsReportSection = () => {
                       <tr>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Fecha</th>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Hora</th>
+                        <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Llegada</th>
+                        <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Puntualidad</th>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Proveedor</th>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Tipo</th>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Estado</th>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Recepción</th>
+                        <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Condiciones</th>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-center text-gray-500 uppercase">Ítems</th>
                       </tr>
                     </thead>
@@ -199,6 +254,12 @@ const AppointmentsReportSection = () => {
                         <tr key={r.id} className="hover:bg-gray-50">
                           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{fmtDate(r.date)}</td>
                           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{r.time}</td>
+                          <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{r.actual_arrival_time || '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {r.arrived_on_time === true && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">A tiempo</span>}
+                            {r.arrived_on_time === false && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">+{r.delay_minutes} min</span>}
+                            {(r.arrived_on_time === null || r.arrived_on_time === undefined) && <span className="text-xs text-gray-400">—</span>}
+                          </td>
                           <td className="px-3 py-2 min-w-[160px]">
                             <p className="font-medium text-gray-800 truncate">{r.provider_name}</p>
                             {r.is_rescheduled && <span className="inline-flex items-center gap-1 text-[11px] text-purple-600"><RefreshCw className="w-3 h-3"/>Reagendada</span>}
@@ -210,6 +271,13 @@ const AppointmentsReportSection = () => {
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${RECEPTION_BADGE[r.reception_status] || 'bg-gray-100 text-gray-700'}`}>{r.reception_label}</span>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {!r.conditions_evaluated
+                              ? <span className="text-xs text-gray-400">—</span>
+                              : r.conditions_failed > 0
+                                ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">{r.conditions_failed} no cumple{r.conditions_failed > 1 ? 'n' : ''}</span>
+                                : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-700"><CheckCircle className="w-3 h-3"/>Cumple</span>}
                           </td>
                           <td className="px-3 py-2 text-center text-gray-600">
                             {r.items_total}
@@ -228,8 +296,9 @@ const AppointmentsReportSection = () => {
         <div className="flex items-start gap-2 p-3 border border-emerald-200 rounded-xl bg-emerald-50">
           <FileSpreadsheet className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5"/>
           <p className="text-xs text-emerald-700">
-            El Excel incluye dos hojas: <strong>"Citas"</strong> con el resumen de cada cita (estado, entrada, recepción, reagendos)
-            y <strong>"Detalle Productos"</strong> con cada ítem entregado, rechazado o no entregado por cita.
+            El Excel incluye tres hojas: <strong>"Citas"</strong> con el resumen de cada cita (entrada, puntualidad, recepción y condiciones de la entrega),
+            <strong> "Detalle Productos"</strong> con cada ítem entregado, rechazado o no entregado,
+            y <strong>"Desempeño por Proveedor"</strong> con puntualidad, inasistencias y condiciones no cumplidas de cada proveedor.
           </p>
         </div>
       </div>
