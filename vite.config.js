@@ -51,6 +51,8 @@ export default defineConfig({
       workbox: {
         // Cachear assets estáticos
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // ✅ El límite por defecto es 2 MB; con el editor de texto (TipTap) el bundle lo pasaba
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MB
         // Rutas que siempre van a la red (API)
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api/],
@@ -90,4 +92,19 @@ export default defineConfig({
       },
     }),
   ],
+  // ✅ Separa las librerías grandes en archivos propios: el archivo principal pesa menos
+  // y el navegador las guarda en caché aparte (no se vuelven a descargar en cada deploy
+  // mientras no cambie su versión)
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react:  ['react', 'react-dom', 'react-router-dom'],
+          tiptap: ['@tiptap/react', '@tiptap/starter-kit'],
+          xlsx:   ['xlsx'],
+          pdf:    ['jspdf', 'jspdf-autotable'],
+        },
+      },
+    },
+  },
 })
