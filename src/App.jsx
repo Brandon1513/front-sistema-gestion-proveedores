@@ -43,7 +43,8 @@ import { ProviderRequestsQueuePage } from './pages/providers/ProviderRequestsQue
 import { ProviderAccountStatementPage } from './pages/providers/ProviderAccountStatementPage';
 import { FinanceAccountStatementPage } from './pages/finance/FinanceAccountStatementPage';
 import { ChangeRequestsInboxPage } from './pages/change-requests/ChangeRequestsInboxPage';
-
+import { NonConformitiesPage } from './pages/non-conformities/NonConformitiesPage';
+import { ProviderNonConformitiesPage } from './pages/non-conformities/ProviderNonConformitiesPage';
 import './styles/custom-animations.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -124,6 +125,11 @@ function App() {
             <Route path="reports" element={
               <RoleProtectedRoute allowedRoles={['super_admin','admin','calidad','compras','ingeniero_alimentos']}>
                 <ReportsPage />
+              </RoleProtectedRoute>
+            } />
+            <Route path="non-conformities" element={
+              <RoleProtectedRoute allowedRoles={['super_admin','admin','ingeniero_alimentos','calidad','compras']}>
+                <NonConformitiesPage />
               </RoleProtectedRoute>
             } />
             <Route path="finance/account-statement" element={
@@ -213,6 +219,7 @@ function App() {
             <Route path="/provider/certifications" element={<ProviderCertificationsPage />} />
             <Route path="/provider/profile"        element={<ProviderProfilePage />} />
             <Route path="/provider/appointments"   element={<ProviderAppointmentsPage />} />
+            <Route path="/provider/non-conformities" element={<ProviderNonConformitiesPage />} />
             <Route path="/provider/help"           element={<ProviderHelpPage/>}/>
           </Route>
 
