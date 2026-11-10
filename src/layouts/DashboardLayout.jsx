@@ -12,7 +12,7 @@ import {
   Menu, X, Bell, BarChart3, Send, Shield, FlaskConical,
   Settings, FileCog, Package, ChevronDown, ChevronRight,
   PanelLeftClose, PanelLeftOpen, Clock, AlertTriangle, Tag,
-  RefreshCw, UserX, CheckCircle, Ban, Activity, FileSpreadsheet, Inbox, Wallet, MessageSquare
+  RefreshCw, UserX, CheckCircle, Ban, Activity, FileSpreadsheet, Inbox, Wallet, MessageSquare, FileWarning
 } from 'lucide-react';
 
 const EVENT_CONFIG = {
@@ -21,6 +21,9 @@ const EVENT_CONFIG = {
   appointment_entry_confirmed: { icon: CheckCircle, bg: 'bg-green-100',  color: 'text-green-600'  },
   calendar_block_created:      { icon: Ban,         bg: 'bg-red-100',    color: 'text-red-600'    },
   provider_request_created:    { icon: Send,        bg: 'bg-teal-100',   color: 'text-teal-600'   },
+  nc_response_submitted:       { icon: FileWarning, bg: 'bg-blue-100',   color: 'text-blue-600'   },
+  nc_evidence_submitted:       { icon: FileWarning, bg: 'bg-teal-100',   color: 'text-teal-600'   },
+  nc_due_reminder:             { icon: Clock,       bg: 'bg-amber-100',  color: 'text-amber-600'  },
 };
 const getEventConfig = (type) => EVENT_CONFIG[type] || { icon: Activity, bg: 'bg-gray-100', color: 'text-gray-500' };
 
@@ -122,6 +125,7 @@ export const DashboardLayout = () => {
     { name: 'Calendario de Citas',    href: '/appointments',         icon: CalendarDays,    roles: ['super_admin','admin','compras'] },
     { name: 'Control de Acceso',      href: '/security/calendar',    icon: Shield,          roles: ['super_admin','admin','seguridad'] },
     { name: 'Recepción de Productos', href: '/food-engineer',        icon: FlaskConical,    roles: ['super_admin','admin','ingeniero_alimentos'] },
+    { name: 'No Conformidades',       href: '/non-conformities',     icon: FileWarning,     roles: ['super_admin','admin','ingeniero_alimentos','calidad','compras'] },
     { name: 'Reportes',               href: '/reports',              icon: FileSpreadsheet, roles: ['super_admin','admin','calidad','compras','ingeniero_alimentos','cuentas_por_pagar'] },
     { name: 'User Management',        href: '/admin/users',          icon: Users,           roles: ['super_admin','admin'] },
     { name: 'Estado de Cuenta', href: '/finance/account-statement', icon: Wallet, roles: ['super_admin','admin','compras','finanzas','cuentas_por_pagar','ingeniero_alimentos'] },
