@@ -5,10 +5,11 @@ import { reportService } from '../../api/reportService';
 import api from '../../api/axios';
 import { Button } from '../../components/common/Button';
 import { showToast } from '../../utils/toast';
+import { InternalNotes, formatStay } from '../../components/appointments/InternalNotes';
 import {
   FileSpreadsheet, Download, Filter, Building2, Calendar, Tag, RotateCcw,
   Eye, RefreshCw, AlertCircle, ShieldCheck, ShieldAlert, ShieldX,
-  Timer, UserX, ClipboardCheck, CheckCircle,
+  Timer, UserX, ClipboardCheck, CheckCircle, LogOut, MessageSquare, ChevronDown, ChevronUp,
 } from 'lucide-react';
 
 const STATUS_OPTIONS = [
@@ -66,6 +67,18 @@ const RECEPTION_BADGE = {
 
 const EMPTY_APPOINTMENT_FILTERS = { date_from: '', date_to: '', provider_id: '', status: '', reception_status: '', punctuality: '' };
 
+// Observaciones internas de una fila del reporte (Compras, Seguridad e Ingeniero)
+const countNotes = (r) =>
+  [r.notes, r.entry_notes, r.exit_notes, r.reception_notes].filter(Boolean).length + (r.items?.length || 0);
+
+const notesTooltip = (r) => [
+  r.notes           && `Compras: ${r.notes}`,
+  r.entry_notes     && `Seguridad (entrada): ${r.entry_notes}`,
+  r.exit_notes      && `Seguridad (salida): ${r.exit_notes}`,
+  r.reception_notes && `Ingeniero: ${r.reception_notes}`,
+  ...(r.items || []).map(i => `Ingeniero · ${i.product_name}: ${i.reception_notes}`),
+].filter(Boolean).join('\n');
+
 const cleanParams = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== ''));
 const fmtDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
@@ -95,6 +108,7 @@ const SummaryCard = ({ icon: Icon, label, value, detail, color }) => {
 const AppointmentsReportSection = () => {
   const [filters, setFilters] = useState(EMPTY_APPOINTMENT_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState(null);
+  const [openNotes, setOpenNotes] = useState(null); // id de la fila con observaciones abiertas
 
   const { data: providersData } = useQuery({
     queryKey: ['providers-select'],
@@ -241,17 +255,23 @@ const AppointmentsReportSection = () => {
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Hora</th>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Llegada</th>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Puntualidad</th>
+                        <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Salida</th>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Proveedor</th>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Tipo</th>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Estado</th>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Recepción</th>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-left text-gray-500 uppercase">Condiciones</th>
                         <th className="px-3 py-2 text-xs font-bold tracking-wide text-center text-gray-500 uppercase">Ítems</th>
+                        <th className="px-3 py-2 text-xs font-bold tracking-wide text-center text-gray-500 uppercase">Obs.</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {rows.map(r => (
-                        <tr key={r.id} className="hover:bg-gray-50">
+                      {rows.map(r => {
+                        const nNotes = countNotes(r);
+                        const isOpen = openNotes === r.id;
+                        return (
+                        <React.Fragment key={r.id}>
+                        <tr className={`hover:bg-gray-50 ${isOpen ? 'bg-indigo-50/40' : ''}`}>
                           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{fmtDate(r.date)}</td>
                           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{r.time}</td>
                           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{r.actual_arrival_time || '—'}</td>
@@ -259,6 +279,16 @@ const AppointmentsReportSection = () => {
                             {r.arrived_on_time === true && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">A tiempo</span>}
                             {r.arrived_on_time === false && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">+{r.delay_minutes} min</span>}
                             {(r.arrived_on_time === null || r.arrived_on_time === undefined) && <span className="text-xs text-gray-400">—</span>}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {r.actual_exit_time ? (
+                              <div className="leading-tight">
+                                <p className="flex items-center gap-1 text-gray-700"><LogOut className="w-3 h-3 text-slate-400"/>{r.actual_exit_time}</p>
+                                {r.stay_minutes !== null && r.stay_minutes !== undefined && <p className="text-[11px] text-gray-400">En planta {formatStay(r.stay_minutes)}</p>}
+                              </div>
+                            ) : r.actual_arrival_time ? (
+                              <span className="text-[11px] font-semibold text-amber-600">Sin registrar</span>
+                            ) : <span className="text-xs text-gray-400">—</span>}
                           </td>
                           <td className="px-3 py-2 min-w-[160px]">
                             <p className="font-medium text-gray-800 truncate">{r.provider_name}</p>
@@ -283,8 +313,26 @@ const AppointmentsReportSection = () => {
                             {r.items_total}
                             {r.items_not_delivered > 0 && <span className="ml-1 text-[11px] text-slate-500">({r.items_not_delivered} no entreg.)</span>}
                           </td>
+                          <td className="px-3 py-2 text-center">
+                            {nNotes > 0 ? (
+                              <button type="button" onClick={() => setOpenNotes(isOpen ? null : r.id)} title={notesTooltip(r)}
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-colors ${isOpen ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>
+                                <MessageSquare className="w-3.5 h-3.5"/>{nNotes}
+                                {isOpen ? <ChevronUp className="w-3 h-3"/> : <ChevronDown className="w-3 h-3"/>}
+                              </button>
+                            ) : <span className="text-xs text-gray-300">—</span>}
+                          </td>
                         </tr>
-                      ))}
+                        {isOpen && (
+                          <tr className="bg-indigo-50/40">
+                            <td colSpan={12} className="px-4 pt-1 pb-4">
+                              <InternalNotes appointment={r} show={['compras', 'seguridad', 'ingeniero']}/>
+                            </td>
+                          </tr>
+                        )}
+                        </React.Fragment>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -296,7 +344,7 @@ const AppointmentsReportSection = () => {
         <div className="flex items-start gap-2 p-3 border border-emerald-200 rounded-xl bg-emerald-50">
           <FileSpreadsheet className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5"/>
           <p className="text-xs text-emerald-700">
-            El Excel incluye tres hojas: <strong>"Citas"</strong> con el resumen de cada cita (entrada, puntualidad, recepción y condiciones de la entrega),
+            El Excel incluye tres hojas: <strong>"Citas"</strong> con el resumen de cada cita (entrada, puntualidad, salida y tiempo en planta, recepción, condiciones de la entrega y observaciones internas de Compras y Seguridad),
             <strong> "Detalle Productos"</strong> con cada ítem entregado, rechazado o no entregado,
             y <strong>"Desempeño por Proveedor"</strong> con puntualidad, inasistencias y condiciones no cumplidas de cada proveedor.
           </p>

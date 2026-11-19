@@ -4,12 +4,13 @@ import { appointmentService } from '../../api/appointmentService';
 import api from '../../api/axios';
 import { Button } from '../../components/common/Button';
 import { showToast } from '../../utils/toast';
+import { InternalNotes, formatStay } from '../../components/appointments/InternalNotes';
 import {
   Shield, Calendar, Clock, ChevronLeft, ChevronRight,
   CheckCircle, XCircle, Truck, User, X, AlertCircle,
   FileText, LayoutGrid, List as ListIcon, Info, Timer,
   UserX, Package, Wrench, ChevronDown, ChevronUp,
-  History, Search, Filter, FlaskConical, Ban,
+  History, Search, Filter, FlaskConical, Ban, LogOut, LogIn,
 } from 'lucide-react';
 
 const DAYS   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
@@ -62,6 +63,7 @@ const getReceptionCardBorder = (a) => {
 };
 const getAccessHourBlock = (a) => {
   if (a.status === 'no_show') return 'bg-orange-100 text-orange-700';
+  if (a.is_exit_registered)   return 'bg-slate-200 text-slate-600';
   if (a.is_entry_confirmed)   return a.has_missing_docs ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700';
   return 'bg-gray-100 text-gray-800';
 };
@@ -146,6 +148,7 @@ const PendingActionModal = ({ appointment, onConfirm, onNoShow, onClose }) => (
       </div>
       <div className="p-6 space-y-3">
         <p className="mb-2 text-sm text-gray-600">Esta cita está pendiente de registro. ¿El proveedor llegó o no se presentó?</p>
+        <InternalNotes appointment={appointment} show={['compras']}/>
         <button onClick={onConfirm}
           className="flex items-center w-full gap-3 p-4 text-left transition-all border-2 border-green-200 rounded-xl bg-green-50 hover:bg-green-100 hover:border-green-300">
           <div className="flex items-center justify-center flex-shrink-0 w-10 h-10 bg-green-100 rounded-xl">
@@ -183,8 +186,10 @@ const DayAppointmentsModal = ({ dateStr, appointments, blocks = [], mode, onSele
     if (isAccess) {
       if (a.status === 'no_show')
         return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200"><UserX className="w-3 h-3"/>No se presentó</span>;
+      if (a.is_exit_registered)
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-200 text-slate-700 border border-slate-300"><LogOut className="w-3 h-3"/>Salió {a.actual_exit_time}</span>;
       if (a.is_entry_confirmed)
-        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200"><CheckCircle className="w-3 h-3"/>Entrada confirmada</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200"><LogIn className="w-3 h-3"/>En planta · falta salida</span>;
       return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200"><Clock className="w-3 h-3"/>Pendiente confirmar</span>;
     } else {
       if (a.status === 'no_show')
@@ -360,6 +365,7 @@ const ConfirmEntryModal = ({ appointment, onClose }) => {
             {appointment.vehicle_display && <p className="flex items-center gap-1 text-xs text-gray-600"><Truck className="w-3 h-3"/>{appointment.vehicle_display}</p>}
             {appointment.driver_display  && <p className="flex items-center gap-1 text-xs text-gray-600"><User className="w-3 h-3"/>{appointment.driver_display}</p>}
           </div>
+          <InternalNotes appointment={appointment} show={['compras']}/>
           <div>
             <label className="block mb-1.5 text-sm font-semibold text-gray-700"><Timer className="inline w-4 h-4 mr-1 text-amber-600"/>Hora real de llegada *</label>
             <input type="time" value={arrivalTime} onChange={e => setArrivalTime(e.target.value)} className="w-full px-3 py-2.5 text-sm border-2 border-gray-200 rounded-xl focus:outline-none focus:border-amber-400"/>
@@ -388,7 +394,7 @@ const ConfirmEntryModal = ({ appointment, onClose }) => {
             </div>
           )}
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-gray-700">Notas <span className="font-normal text-gray-400">(opcional)</span></label>
+            <label className="block mb-1.5 text-sm font-semibold text-gray-700">Notas internas <span className="font-normal text-gray-400">(opcional · las ve Compras, no el proveedor)</span></label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} maxLength={500} placeholder="Ej. Vehículo verificado..."
               className="w-full px-3 py-2.5 text-sm border-2 border-gray-200 rounded-xl focus:outline-none focus:border-amber-400 resize-none"/>
           </div>
@@ -405,16 +411,106 @@ const ConfirmEntryModal = ({ appointment, onClose }) => {
   );
 };
 
+// ─── Modal Registrar salida (cierre de la cita) ──────────────────────────────
+const RegisterExitModal = ({ appointment, onClose }) => {
+  const queryClient = useQueryClient();
+  const [exitTime, setExitTime] = useState(() => new Date().toTimeString().slice(0,5));
+  const [notes, setNotes]       = useState('');
+  const [error, setError]       = useState('');
+  const arrival = appointment.actual_arrival_time?.slice(0,5) || appointment.entry_confirmed_at;
+
+  const toMin = (t) => { const [h, m] = (t || '0:0').split(':').map(Number); return h * 60 + m; };
+  const stay  = arrival ? toMin(exitTime) - toMin(arrival) : null;
+
+  const mutation = useMutation({
+    mutationFn: () => appointmentService.registerExit(appointment.id, { actual_exit_time: exitTime, exit_notes: notes.trim() || null }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['security-appointments'], exact: false });
+      showToast.success('Salida registrada');
+      onClose();
+    },
+    onError: (err) => setError(err.response?.data?.message || 'Error al registrar la salida'),
+  });
+
+  const submit = () => {
+    setError('');
+    if (!exitTime) return setError('Indica la hora de salida');
+    if (stay !== null && stay < 0) return setError(`La hora de salida no puede ser anterior a la de llegada (${arrival})`);
+    mutation.mutate();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-slate-50 to-gray-100 rounded-t-2xl">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg shadow-md bg-slate-600"><LogOut className="w-5 h-5 text-white"/></div>
+            <div><h2 className="text-lg font-bold text-gray-900">Registrar salida</h2><p className="text-xs text-gray-500">{appointment.provider?.business_name}</p></div>
+          </div>
+          <button onClick={onClose} className="p-2 text-gray-400 rounded-lg hover:bg-gray-100"><X className="w-5 h-5"/></button>
+        </div>
+        <div className="p-6 space-y-5">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 border-2 border-green-200 rounded-xl bg-green-50">
+              <p className="text-xs font-semibold text-green-700">Llegó</p>
+              <p className="text-lg font-bold text-green-800">{arrival || '—'} hrs</p>
+            </div>
+            <div className="p-3 border-2 rounded-xl border-slate-200 bg-slate-50">
+              <p className="text-xs font-semibold text-slate-600">Tiempo en planta</p>
+              <p className="text-lg font-bold text-slate-800">{stay !== null && stay >= 0 ? formatStay(stay) : '—'}</p>
+            </div>
+          </div>
+          {/* ✅ Resultado de la recepción (solo entregas) */}
+          {appointment.type === 'entrega' && (
+            appointment.is_reception_reviewed ? (
+              <div className="flex items-center gap-2 px-3 py-2 text-xs text-teal-800 border border-teal-200 rounded-xl bg-teal-50">
+                <FlaskConical className="flex-shrink-0 w-4 h-4"/>
+                <span>Recepción registrada: <strong>{appointment.reception_label}</strong>{appointment.reception_reviewed_by ? ` · ${appointment.reception_reviewed_by}` : ''}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-2 text-xs border rounded-xl border-amber-200 bg-amber-50 text-amber-800">
+                <AlertCircle className="flex-shrink-0 w-4 h-4"/>
+                <span>El ingeniero de alimentos aún no registra la recepción de esta entrega.</span>
+              </div>
+            )
+          )}
+          <InternalNotes appointment={appointment} show={['compras', 'seguridad', 'ingeniero']}/>
+          <div>
+            <label className="block mb-1.5 text-sm font-semibold text-gray-700"><Timer className="inline w-4 h-4 mr-1 text-slate-600"/>Hora de salida *</label>
+            <input type="time" value={exitTime} onChange={e => setExitTime(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border-2 border-gray-200 rounded-xl focus:outline-none focus:border-slate-400"/>
+          </div>
+          <div>
+            <label className="block mb-1.5 text-sm font-semibold text-gray-700">Notas internas <span className="font-normal text-gray-400">(opcional · las ve Compras)</span></label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} maxLength={500} placeholder="Ej. Salió sin incidentes..."
+              className="w-full px-3 py-2.5 text-sm border-2 border-gray-200 rounded-xl focus:outline-none focus:border-slate-400 resize-none"/>
+          </div>
+          {error && <div className="flex items-start gap-2 p-3 border border-red-200 rounded-xl bg-red-50"><AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5"/><p className="text-sm text-red-700">{error}</p></div>}
+          <div className="flex gap-3">
+            <Button loading={mutation.isPending} onClick={submit} leftIcon={<LogOut className="w-4 h-4"/>}
+              className="flex-1 bg-slate-700 hover:bg-slate-800 text-white font-semibold py-2.5 rounded-xl">
+              Registrar salida
+            </Button>
+            <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>Cancelar</Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Tarjeta de cita (Control de Acceso) ─────────────────────────────────────
-const AppointmentCard = ({ appointment, onConfirm, onNoShow }) => {
+const AppointmentCard = ({ appointment, onConfirm, onNoShow, onExit }) => {
   const typeCfg     = TYPE_CONFIG[appointment.type] || TYPE_CONFIG.servicio;
   const isConfirmed = appointment.is_entry_confirmed;
   const isNoShow    = appointment.status === 'no_show';
   const hasMissing  = appointment.has_missing_docs;
   const missingDocs = (appointment.physical_docs_status || []).filter(d => d.missing && d.required);
   const canAct      = !isConfirmed && !isNoShow && appointment.status !== 'cancelled';
+  const hasExited   = appointment.is_exit_registered;
+  const canExit     = isConfirmed && !isNoShow && !hasExited;
   return (
-    <div className={`rounded-xl border-2 transition-all ${isNoShow?'border-orange-200 bg-orange-50/20':isConfirmed?hasMissing?'border-red-200 bg-red-50/20':'border-green-200 bg-green-50/30':`${typeCfg.border} bg-white hover:shadow-md`}`}>
+    <div className={`rounded-xl border-2 transition-all ${isNoShow?'border-orange-200 bg-orange-50/20':hasExited?'border-slate-200 bg-slate-50/50':isConfirmed?hasMissing?'border-red-200 bg-red-50/20':'border-green-200 bg-green-50/30':`${typeCfg.border} bg-white hover:shadow-md`}`}>
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center flex-1 min-w-0 gap-4">
           <div className={`flex-shrink-0 flex items-center justify-center w-16 h-16 rounded-xl font-bold text-lg ${getAccessHourBlock(appointment)}`}>
@@ -426,6 +522,8 @@ const AppointmentCard = ({ appointment, onConfirm, onNoShow }) => {
               <p className="font-bold text-gray-900 truncate">{appointment.provider?.business_name}</p>
               {isNoShow && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200"><UserX className="w-3 h-3"/>No se presentó</span>}
               {isConfirmed && !isNoShow && <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${hasMissing?'bg-red-100 text-red-700 border-red-200':'bg-green-100 text-green-700 border-green-200'}`}>{hasMissing?<AlertCircle className="w-3 h-3"/>:<CheckCircle className="w-3 h-3"/>}Entró {appointment.entry_confirmed_at}</span>}
+              {hasExited && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-200 text-slate-700 border border-slate-300"><LogOut className="w-3 h-3"/>Salió {appointment.actual_exit_time}{appointment.stay_minutes !== null && appointment.stay_minutes !== undefined ? ` · ${formatStay(appointment.stay_minutes)}` : ''}</span>}
+              {canExit && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200"><LogIn className="w-3 h-3"/>En planta</span>}
               {isConfirmed && appointment.arrived_on_time !== null && <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${appointment.arrived_on_time?'bg-blue-100 text-blue-700 border-blue-200':'bg-orange-100 text-orange-700 border-orange-200'}`}><Timer className="w-3 h-3"/>{appointment.arrived_on_time?'A tiempo':`+${appointment.delay_minutes} min`}</span>}
             </div>
             <p className="text-sm text-gray-500">{typeCfg.label}</p>
@@ -437,6 +535,7 @@ const AppointmentCard = ({ appointment, onConfirm, onNoShow }) => {
             ) : !isNoShow && <p className="flex items-center gap-1 mt-1 text-xs text-amber-600"><AlertCircle className="w-3 h-3"/>Proveedor aún no completó vehículo/chofer</p>}
             {isNoShow && appointment.no_show_notes && <p className="mt-1 text-xs italic text-orange-600">"{appointment.no_show_notes}"</p>}
             {isConfirmed && hasMissing && missingDocs.length > 0 && <div className="mt-1.5 flex items-start gap-1"><AlertCircle className="w-3 h-3 text-red-500 flex-shrink-0 mt-0.5"/><p className="text-xs text-red-600">Falta: {missingDocs.map(d=>d.label).join(', ')}</p></div>}
+            <InternalNotes appointment={appointment} show={['compras']} compact/>
           </div>
         </div>
         <div className="flex flex-col flex-shrink-0 gap-2 ml-4">
@@ -449,9 +548,13 @@ const AppointmentCard = ({ appointment, onConfirm, onNoShow }) => {
               </button>
             </>
           )}
-          {isConfirmed && !isNoShow && (
-            <div className={`flex items-center justify-center w-10 h-10 rounded-xl ${hasMissing?'bg-red-100':'bg-green-100'}`}>
-              {hasMissing?<AlertCircle className="w-6 h-6 text-red-600"/>:<CheckCircle className="w-6 h-6 text-green-600"/>}
+          {canExit && onExit && (
+            <Button size="sm" onClick={() => onExit(appointment)} leftIcon={<LogOut className="w-3.5 h-3.5"/>}
+              className="font-semibold text-white bg-slate-700 hover:bg-slate-800 whitespace-nowrap">Registrar salida</Button>
+          )}
+          {hasExited && (
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-200">
+              <LogOut className="w-5 h-5 text-slate-600"/>
             </div>
           )}
         </div>
@@ -572,6 +675,7 @@ export const SecurityCalendarPage = () => {
 
   const [confirmingAppt,    setConfirmingAppt]    = useState(null);
   const [noShowAppt,        setNoShowAppt]        = useState(null);
+  const [exitAppt,          setExitAppt]          = useState(null);
   const [pendingActionAppt, setPendingActionAppt] = useState(null);
   const [noShowDetailAppt,  setNoShowDetailAppt]  = useState(null);
   const [accessDayModal,    setAccessDayModal]    = useState(null);
@@ -669,6 +773,7 @@ export const SecurityCalendarPage = () => {
   const confirmed = accessAppointments.filter(a => a.is_entry_confirmed).length;
   const pending   = accessAppointments.filter(a => !a.is_entry_confirmed && a.status !== 'no_show' && a.status !== 'cancelled').length;
   const noShows   = accessAppointments.filter(a => a.status === 'no_show').length;
+  const inPlant   = accessAppointments.filter(a => a.is_entry_confirmed && !a.is_exit_registered && a.status !== 'no_show').length;
 
   const navigateCal = (dir) => {
     if (view === 'month')    setCurrentDate(d => new Date(d.getFullYear(), d.getMonth()+dir, 1));
@@ -690,8 +795,9 @@ export const SecurityCalendarPage = () => {
         const a = dayAppts[0];
         if (a.status === 'no_show') {
           setNoShowDetailAppt(a);
+        } else if (a.is_entry_confirmed && !a.is_exit_registered) {
+          setExitAppt(a);
         } else if (a.is_entry_confirmed) {
-          setActiveTab('receptions');
           setSelectedDate(a.appointment_date);
           setView('day');
         } else if (a.status !== 'cancelled') {
@@ -868,11 +974,17 @@ export const SecurityCalendarPage = () => {
       {activeTab === 'access' && (
         <>
           {view !== 'month' && (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              {[{label:'Total',value:accessAppointments.length,color:'blue'},{label:'Confirmadas',value:confirmed,color:'green'},{label:'Pendientes',value:pending,color:'amber'},{label:'No se presentó',value:noShows,color:'orange'}].map(s => (
-                <div key={s.label} className={`p-4 bg-white border-2 border-${s.color}-200 rounded-xl`}>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+              {[
+                {label:'Total',          value:accessAppointments.length, border:'border-blue-200',   text:'text-blue-600'},
+                {label:'Confirmadas',    value:confirmed,                 border:'border-green-200',  text:'text-green-600'},
+                {label:'En planta',      value:inPlant,                   border:'border-slate-300',  text:'text-slate-700'},
+                {label:'Pendientes',     value:pending,                   border:'border-amber-200',  text:'text-amber-600'},
+                {label:'No se presentó', value:noShows,                   border:'border-orange-200', text:'text-orange-600'},
+              ].map(s => (
+                <div key={s.label} className={`p-4 bg-white border-2 ${s.border} rounded-xl`}>
                   <p className="text-xs font-semibold tracking-wide text-gray-500 uppercase">{s.label}</p>
-                  <p className={`mt-1 text-3xl font-bold text-${s.color}-600`}>{s.value}</p>
+                  <p className={`mt-1 text-3xl font-bold ${s.text}`}>{s.value}</p>
                 </div>
               ))}
             </div>
@@ -891,17 +1003,18 @@ export const SecurityCalendarPage = () => {
                     {/* ✅ Bloqueos del día */}
                     {(blocksByDate[selectedDate] || []).map(b => <BlockCard key={`b-${b.id}`} block={b}/>)}
                     {accessAppointments.length>0
-                      ? accessAppointments.map(a => <AppointmentCard key={a.id} appointment={a} onConfirm={setConfirmingAppt} onNoShow={setNoShowAppt}/>)
+                      ? accessAppointments.map(a => <AppointmentCard key={a.id} appointment={a} onConfirm={setConfirmingAppt} onNoShow={setNoShowAppt} onExit={setExitAppt}/>)
                       : <div className="py-12 text-center"><Shield className="w-12 h-12 mx-auto mb-3 text-gray-300"/><p className="font-medium text-gray-500">No hay visitas programadas</p></div>}
                   </div>
                 </div>
               )
           )}
-          {view === 'week' && renderWeek(a => <AppointmentCard key={a.id} appointment={a} onConfirm={setConfirmingAppt} onNoShow={setNoShowAppt}/>)}
+          {view === 'week' && renderWeek(a => <AppointmentCard key={a.id} appointment={a} onConfirm={setConfirmingAppt} onNoShow={setNoShowAppt} onExit={setExitAppt}/>)}
           <div className="flex flex-wrap gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl">
             <span className="flex items-center gap-1.5 text-xs font-medium text-gray-600"><span className="w-3 h-3 bg-blue-500 rounded-full"/>Agendada</span>
             <span className="flex items-center gap-1.5 text-xs font-medium text-gray-600"><span className="w-3 h-3 bg-green-500 rounded-full"/>Confirmada</span>
             <span className="flex items-center gap-1.5 text-xs font-medium text-gray-600"><span className="w-3 h-3 bg-gray-400 rounded-full"/>Completada</span>
+            <span className="flex items-center gap-1.5 text-xs font-medium text-slate-600"><LogOut className="w-3 h-3"/>Ya salió</span>
             <span className="flex items-center gap-1.5 text-xs font-medium text-orange-600"><span className="w-3 h-3 bg-orange-400 rounded-full"/>No se presentó</span>
             <span className="flex items-center gap-1.5 text-xs font-medium text-red-500 ml-2"><span className="w-2 h-2 bg-red-500 rounded-full"/>Docs faltantes</span>
             <span className="flex items-center gap-1.5 text-xs font-medium text-red-500 ml-2"><Ban className="w-3 h-3"/>Espacio bloqueado</span>
@@ -1017,6 +1130,8 @@ export const SecurityCalendarPage = () => {
       {confirmingAppt    && <ConfirmEntryModal  appointment={confirmingAppt}    onClose={() => setConfirmingAppt(null)}/>}
       {noShowAppt        && <NoShowModal        appointment={noShowAppt}        onClose={() => setNoShowAppt(null)}/>}
       {noShowDetailAppt  && <NoShowDetailModal  appointment={noShowDetailAppt}  onClose={() => setNoShowDetailAppt(null)}/>}
+      {exitAppt && <RegisterExitModal appointment={exitAppt} onClose={() => setExitAppt(null)}/>}
+
       {pendingActionAppt && (
         <PendingActionModal
           appointment={pendingActionAppt}
@@ -1037,8 +1152,9 @@ export const SecurityCalendarPage = () => {
             setAccessDayModal(null);
             if (a.status === 'no_show') {
               setNoShowDetailAppt(a);
+            } else if (a.is_entry_confirmed && !a.is_exit_registered) {
+              setExitAppt(a);
             } else if (a.is_entry_confirmed) {
-              setActiveTab('receptions');
               setSelectedDate(a.appointment_date);
               setView('day');
             } else if (a.status !== 'cancelled') {

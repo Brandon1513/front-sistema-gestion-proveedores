@@ -4,6 +4,7 @@ import { appointmentService } from '../../api/appointmentService';
 import api from '../../api/axios';
 import { Button } from '../../components/common/Button';
 import { showToast } from '../../utils/toast';
+import { InternalNotes } from '../../components/appointments/InternalNotes';
 import {
   FlaskConical, Clock, CheckCircle, XCircle, ChevronDown, ChevronUp,
   X, AlertCircle, History, Info, Search, Filter, Package, Calendar,
@@ -809,6 +810,9 @@ const ReceptionModal = ({ appointment, onClose, onBack }) => {
         </div>
  
         <div className="p-6">
+
+          {/* ✅ Observaciones internas: lo que dejó Compras al agendar y Seguridad al dar entrada */}
+          <div className="mb-4"><InternalNotes appointment={appointment} show={['compras', 'seguridad']}/></div>
  
           {/* ── Estado 1: No se presentó ── */}
           {isNoShow && (
@@ -1055,6 +1059,7 @@ const DeliveryCard = ({ appointment, onRegister, isPast = false }) => {
               </div>
             )}
             {isReviewed && <p className="mt-1 text-xs text-gray-400">Por {appointment.reception_reviewed_by} · {appointment.reception_reviewed_at}</p>}
+            <InternalNotes appointment={appointment} show={['compras']} compact/>
           </div>
         </div>
         <div className="flex items-center flex-shrink-0 gap-2 ml-4">
