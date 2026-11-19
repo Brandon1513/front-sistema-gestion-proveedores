@@ -5,6 +5,7 @@ import { providerService } from '../../api/providerService';
 import { Button } from '../../components/common/Button';
 import { showToast } from '../../utils/toast';
 import { useAuthStore } from '../../stores/authStore';
+import { InternalNotes, formatStay } from '../../components/appointments/InternalNotes';
 import api from '../../api/axios';
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, Clock, X,
@@ -12,7 +13,7 @@ import {
   LayoutGrid, List, Tag, Paperclip, AlertCircle, Truck,
   User, Info, ShieldCheck, ShieldX, Timer, Package,
   Wrench, Trash2, FlaskConical, RefreshCw, Ban,
-  ClipboardCheck, Camera, Eye, Lock,
+  ClipboardCheck, Camera, Eye, Lock, LogOut,
 } from 'lucide-react';
 
 const DAYS   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
@@ -471,8 +472,10 @@ const AppointmentModal = ({ appointment, onClose, preselectedDate, isReschedule 
 
           {/* Observaciones */}
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-gray-700"><FileText className="inline w-4 h-4 mr-1 text-primary-600"/>Observaciones</label>
+            <label className="block mb-1.5 text-sm font-semibold text-gray-700"><Lock className="inline w-4 h-4 mr-1 text-primary-600"/>Observaciones internas</label>
+            <p className="mb-1.5 text-xs text-gray-500">Las ven Seguridad y el Ingeniero de alimentos. <strong>El proveedor no las ve.</strong></p>
             <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2} maxLength={2000}
+              placeholder="Ej. Revisar temperatura del producto; reprogramada por llegada tarde..." 
               className="w-full px-3 py-2.5 text-sm border-2 border-gray-200 rounded-xl focus:outline-none focus:border-primary-500 resize-none"/>
           </div>
 
@@ -650,8 +653,37 @@ const DetailModal = ({ appointment, onClose, onEdit, onReschedule }) => {
               )}
               {/* ✅ Notas de Seguridad */}
               {appointment.entry_notes && (
-                <p className="pt-2 text-xs italic text-green-800 border-t border-green-200">"{appointment.entry_notes}"</p>
+                <div className="pt-2 border-t border-green-200">
+                  <p className="flex items-center gap-1 mb-0.5 text-xs font-semibold text-green-700">
+                    <FileText className="w-3.5 h-3.5"/>Observaciones de Seguridad · al dar entrada
+                    <span className="inline-flex items-center gap-0.5 ml-auto font-normal text-green-600/80"><Lock className="w-3 h-3"/>Interna</span>
+                  </p>
+                  <p className="text-sm text-green-900 whitespace-pre-line">{appointment.entry_notes}</p>
+                </div>
               )}
+              {/* ✅ Salida registrada por Seguridad */}
+              <div className="pt-2 border-t border-green-200">
+                {appointment.is_exit_registered ? (
+                  <>
+                    <p className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
+                      <span className="flex items-center gap-1 font-semibold"><LogOut className="w-3.5 h-3.5"/>Salió: {appointment.actual_exit_time} hrs</span>
+                      {appointment.stay_minutes !== null && appointment.stay_minutes !== undefined && <span>· En planta {formatStay(appointment.stay_minutes)}</span>}
+                      {appointment.exit_registered_by_name && <span className="text-slate-500">· Registró: {appointment.exit_registered_by_name}</span>}
+                    </p>
+                    {appointment.exit_notes && (
+                      <div className="mt-2">
+                        <p className="flex items-center gap-1 mb-0.5 text-xs font-semibold text-slate-600">
+                          <LogOut className="w-3.5 h-3.5"/>Observaciones de Seguridad · al registrar salida
+                          <span className="inline-flex items-center gap-0.5 ml-auto font-normal text-slate-500"><Lock className="w-3 h-3"/>Interna</span>
+                        </p>
+                        <p className="text-sm whitespace-pre-line text-slate-800">{appointment.exit_notes}</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="flex items-center gap-1 text-xs text-amber-700"><Clock className="w-3.5 h-3.5"/>En planta · Seguridad aún no registra la salida</p>
+                )}
+              </div>
             </div>
           )}
 
@@ -680,12 +712,7 @@ const DetailModal = ({ appointment, onClose, onEdit, onReschedule }) => {
             </div>
           )}
 
-          {appointment.notes && (
-            <div className="p-3 border border-gray-200 rounded-xl bg-gray-50">
-              <p className="mb-1 text-xs text-gray-500">Observaciones</p>
-              <p className="text-sm text-gray-800">{appointment.notes}</p>
-            </div>
-          )}
+          <InternalNotes appointment={appointment} show={['compras']}/>
 
           {appointment.has_attachment && (
             <button onClick={() => appointmentService.downloadAttachment(appointment.id, appointment.attachment_name)}

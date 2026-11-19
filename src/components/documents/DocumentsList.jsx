@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { documentService } from '../../api/documentService';
 import { Card } from '../common/Card';
 import { Button } from '../common/Button';
 import { Badge } from '../common/Badge';
+import { DocumentPreviewModal, canPreviewDocument } from './DocumentPreviewModal';
 import { 
   FileText, 
   Download, 
@@ -13,13 +14,15 @@ import {
   CheckCircle,
   Clock,
   XCircle,
-  User
+  User,
+  Eye
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export const DocumentsList = ({ providerId }) => {
   const queryClient = useQueryClient();
+  const [previewDoc, setPreviewDoc] = useState(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['provider-documents', providerId],
@@ -277,6 +280,17 @@ export const DocumentsList = ({ providerId }) => {
                 
                 {/* Botones de acción */}
                 <div className="flex flex-col gap-2">
+                  {/* ✅ Vista previa (PDF e imágenes) */}
+                  {canPreviewDocument(doc) && (
+                    <button
+                      onClick={() => setPreviewDoc(doc)}
+                      className="p-2.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors shadow-sm"
+                      title="Vista previa"
+                    >
+                      <Eye className="w-5 h-5" />
+                    </button>
+                  )}
+
                   <button
                     onClick={() => handleDownload(doc.id, doc.original_filename)}
                     className="p-2.5 rounded-lg bg-primary-50 text-primary-600 hover:bg-primary-100 transition-colors shadow-sm"
@@ -299,6 +313,15 @@ export const DocumentsList = ({ providerId }) => {
           );
         })}
       </div>
+
+      {previewDoc && (
+        <DocumentPreviewModal
+          providerId={providerId}
+          document={previewDoc}
+          onClose={() => setPreviewDoc(null)}
+          onDownload={(d) => handleDownload(d.id, d.original_filename)}
+        />
+      )}
     </Card>
   );
 };

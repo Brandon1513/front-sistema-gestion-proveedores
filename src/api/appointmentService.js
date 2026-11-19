@@ -54,6 +54,12 @@ export const appointmentService = {
     const r = await api.post(`/security/appointments/${id}/no-show`, { no_show_notes: notes });
     return r.data;
   },
+  // Cierre de la cita: hora de salida del proveedor
+  registerExit: async (id, data) => {
+    // data = { actual_exit_time: 'HH:mm', exit_notes?: string|null }
+    const r = await api.post(`/security/appointments/${id}/register-exit`, data);
+    return r.data;
+  },
 
   // ── Ingeniero de Alimentos ────────────────────────────────────────────────
   foodEngineerGetAppointments: async (params = {}) => {
