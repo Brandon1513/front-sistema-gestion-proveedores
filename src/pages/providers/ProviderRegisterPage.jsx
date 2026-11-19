@@ -19,11 +19,47 @@ const STEPS = [
   { id: 4, label: 'Contacto'            },
 ];
 
+// ✅ Límites alineados con RegisterProviderRequest / columnas de `providers`
+const LIMITS = {
+  business_name:        255,
+  legal_representative: 255,
+  phone:                20,
+  street:               255,
+  exterior_number:      50,
+  interior_number:      100,
+  neighborhood:         255,
+  city:                 255,
+  postal_code:          5,
+  bank:                 255,
+  bank_branch:          255,
+  account_number:       50,
+  clabe:                18,
+  observations:         2000,
+  contact_name:         255,
+  contact_phone:        20,
+  contact_email:        255,
+};
+
+// ✅ A qué paso pertenece cada campo que puede regresar el backend con error
+const STEP_FIELDS = {
+  1: ['token','name','business_name','rfc','tipo_persona','legal_representative','phone','email','password','password_confirmation'],
+  2: ['street','exterior_number','interior_number','neighborhood','city','state','postal_code'],
+  3: ['bank','bank_branch','account_number','clabe','credit_amount','credit_days','observations'],
+};
+
+const stepForField = (field) => {
+  if (field.startsWith('contacts')) return 4; // contacts, contacts.0.email, etc.
+  const found = Object.entries(STEP_FIELDS).find(([, fields]) => fields.includes(field));
+  return found ? Number(found[0]) : null;
+};
+
 export const ProviderRegisterPage = () => {
   const { token }  = useParams();
   const navigate   = useNavigate();
   const [step,     setStep]     = useState(1);
   const [errors,   setErrors]   = useState({});
+  // ✅ NUEVO — resumen visible del error que regresó el servidor (en cualquier paso)
+  const [serverError, setServerError] = useState(null); // { title, items: [] }
   const [formData, setFormData] = useState({
     business_name:        '',
     rfc:                  '',
@@ -114,28 +150,63 @@ export const ProviderRegisterPage = () => {
     if (errors[name]) setErrors(p => ({ ...p, [name]: null }));
   };
 
+  // ✅ NUEVO — cambios del contacto limpian su error específico (contacts.0.name, etc.)
+  const handleContactChange = (field) => (e) => {
+    const value = e.target.value;
+    setContact(c => ({ ...c, [field]: value }));
+    const key = `contacts.0.${field}`;
+    if (errors[key] || errors.contacts) setErrors(p => ({ ...p, [key]: null, contacts: null }));
+  };
+
   // ── Mutación de registro ──────────────────────────────────────────────────
   const mutation = useMutation({
     mutationFn: (data) => api.post('/register-provider', data).then(r => r.data),
     onSuccess: () => navigate('/register/success'),
     onError: (err) => {
-      const apiErrors = err.response?.data?.errors || {};
+      const status    = err.response?.status;
+      const data      = err.response?.data || {};
+      const apiErrors = data.errors || {};
       setErrors(apiErrors);
-      // Si hay errores del step 1, volver al step 1
-      const step1Fields = ['business_name','rfc','tipo_persona','legal_representative','phone','email','password'];
-      const step2Fields = ['street','exterior_number','interior_number','neighborhood','city','state','postal_code'];
-      const step4Fields = ['contacts'];
-      if (step1Fields.some(f => apiErrors[f])) setStep(1);
-      else if (step2Fields.some(f => apiErrors[f])) setStep(2);
-      else if (step4Fields.some(f => apiErrors[f])) setStep(4);
+
+      // 1) Sin respuesta del servidor (red caída, timeout, CORS)
+      if (!err.response) {
+        setServerError({
+          title: 'No pudimos conectar con el servidor',
+          items: ['Revisa tu conexión a internet e intenta de nuevo. Tus datos siguen capturados.'],
+        });
+        return;
+      }
+
+      // 2) Errores de validación (422): ir al primer paso con error y listar qué corregir
+      if (status === 422 && Object.keys(apiErrors).length) {
+        const steps  = Object.keys(apiErrors).map(stepForField).filter(Boolean);
+        const target = steps.length ? Math.min(...steps) : step;
+        setStep(target);
+        setServerError({
+          title: `Revisa la información capturada${target !== step ? ` (te llevamos al paso ${target}: ${STEPS[target - 1].label})` : ''}`,
+          items: Object.values(apiErrors).map(m => Array.isArray(m) ? m[0] : m).filter(Boolean),
+        });
+        return;
+      }
+
+      // 3) Cualquier otro error (400 invitación vencida, 409 cuenta existente, 500…)
+      setServerError({
+        title: data.message || 'Error al registrar. Intenta de nuevo.',
+        items: [],
+      });
     },
   });
 
   // ✅ CORREGIDO — valida el contacto y arma el payload completo
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!contact.name.trim() || !contact.phone.trim() || !contact.email.trim()) {
-      setErrors({ contacts: ['Debes completar al menos un contacto (nombre, teléfono y correo)'] });
+    setServerError(null);
+    const contactErrors = {};
+    if (!contact.name.trim())  contactErrors['contacts.0.name']  = ['El nombre del contacto es obligatorio'];
+    if (!contact.phone.trim()) contactErrors['contacts.0.phone'] = ['El teléfono del contacto es obligatorio'];
+    if (!contact.email.trim()) contactErrors['contacts.0.email'] = ['El correo del contacto es obligatorio'];
+    if (Object.keys(contactErrors).length > 0) {
+      setErrors(contactErrors);
       setStep(4);
       return;
     }
@@ -169,9 +240,16 @@ export const ProviderRegisterPage = () => {
       if (!formData.city.trim())            newErrors.city            = ['La ciudad es obligatoria'];
       if (!formData.state.trim())           newErrors.state           = ['El estado es obligatorio'];
       if (!formData.postal_code.trim())     newErrors.postal_code     = ['El código postal es obligatorio'];
+      else if (!/^\d{5}$/.test(formData.postal_code.trim()))
+                                            newErrors.postal_code     = ['El código postal debe tener exactamente 5 dígitos (ej. 01040)'];
+    }
+    if (step === 3) {
+      if (formData.clabe && !/^\d{18}$/.test(formData.clabe.trim()))
+        newErrors.clabe = ['La CLABE debe tener exactamente 18 dígitos, sin espacios ni guiones'];
     }
     if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return; }
     setErrors({});
+    setServerError(null);
     setStep(s => s + 1);
   };
 
@@ -311,7 +389,7 @@ export const ProviderRegisterPage = () => {
 
                 <div>
                   <label className="block mb-1.5 text-sm font-semibold text-gray-700">Razón Social *</label>
-                  <input name="business_name" value={formData.business_name} onChange={handleChange}
+                  <input name="business_name" value={formData.business_name} maxLength={LIMITS.business_name} onChange={handleChange}
                     placeholder="Nombre de tu empresa o negocio" className={inputClass('business_name')}/>
                   <FieldError field="business_name"/>
                 </div>
@@ -361,7 +439,7 @@ export const ProviderRegisterPage = () => {
 
                 <div>
                   <label className="block mb-1.5 text-sm font-semibold text-gray-700">Representante Legal</label>
-                  <input name="legal_representative" value={formData.legal_representative} onChange={handleChange}
+                  <input name="legal_representative" value={formData.legal_representative} maxLength={LIMITS.legal_representative} onChange={handleChange}
                     placeholder="Nombre completo del representante legal"
                     className={inputClass('legal_representative')}/>
                   <FieldError field="legal_representative"/>
@@ -370,7 +448,7 @@ export const ProviderRegisterPage = () => {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className="block mb-1.5 text-sm font-semibold text-gray-700">Teléfono *</label>
-                    <input name="phone" value={formData.phone} onChange={handleChange}
+                    <input name="phone" value={formData.phone} maxLength={LIMITS.phone} onChange={handleChange}
                       placeholder="33 1234 5678" className={inputClass('phone')}/>
                     <FieldError field="phone"/>
                   </div>
@@ -409,7 +487,7 @@ export const ProviderRegisterPage = () => {
 
                 <div>
                   <label className="block mb-1.5 text-sm font-semibold text-gray-700">Calle *</label>
-                  <input name="street" value={formData.street} onChange={handleChange}
+                  <input name="street" value={formData.street} maxLength={LIMITS.street} onChange={handleChange}
                     placeholder="Nombre de la calle" className={inputClass('street')}/>
                   <FieldError field="street"/>
                 </div>
@@ -417,21 +495,21 @@ export const ProviderRegisterPage = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block mb-1.5 text-sm font-semibold text-gray-700">No. Exterior *</label>
-                    <input name="exterior_number" value={formData.exterior_number} onChange={handleChange}
+                    <input name="exterior_number" value={formData.exterior_number} maxLength={LIMITS.exterior_number} onChange={handleChange}
                       placeholder="123" className={inputClass('exterior_number')}/>
                     <FieldError field="exterior_number"/>
                   </div>
                   <div>
                     <label className="block mb-1.5 text-sm font-semibold text-gray-700">No. Interior</label>
-                    <input name="interior_number" value={formData.interior_number} onChange={handleChange}
-                      placeholder="A, B, 2..." className={inputClass('interior_number')}/>
+                    <input name="interior_number" value={formData.interior_number} maxLength={LIMITS.interior_number} onChange={handleChange}
+                      placeholder="Ej. Piso 18 Oficina 1801-A" className={inputClass('interior_number')}/>
                     <FieldError field="interior_number"/>
                   </div>
                 </div>
 
                 <div>
                   <label className="block mb-1.5 text-sm font-semibold text-gray-700">Colonia *</label>
-                  <input name="neighborhood" value={formData.neighborhood} onChange={handleChange}
+                  <input name="neighborhood" value={formData.neighborhood} maxLength={LIMITS.neighborhood} onChange={handleChange}
                     placeholder="Nombre de la colonia" className={inputClass('neighborhood')}/>
                   <FieldError field="neighborhood"/>
                 </div>
@@ -447,7 +525,7 @@ export const ProviderRegisterPage = () => {
                   </div>
                   <div>
                     <label className="block mb-1.5 text-sm font-semibold text-gray-700">Ciudad *</label>
-                    <input name="city" value={formData.city} onChange={handleChange}
+                    <input name="city" value={formData.city} maxLength={LIMITS.city} onChange={handleChange}
                       placeholder="Ciudad o municipio" className={inputClass('city')}/>
                     <FieldError field="city"/>
                   </div>
@@ -455,8 +533,8 @@ export const ProviderRegisterPage = () => {
 
                 <div>
                   <label className="block mb-1.5 text-sm font-semibold text-gray-700">Código Postal *</label>
-                  <input name="postal_code" value={formData.postal_code} onChange={handleChange}
-                    placeholder="44100" maxLength={10} className={inputClass('postal_code')}/>
+                  <input name="postal_code" value={formData.postal_code} maxLength={LIMITS.postal_code} onChange={handleChange}
+                    placeholder="44100" inputMode="numeric" className={inputClass('postal_code')}/>
                   <FieldError field="postal_code"/>
                 </div>
               </div>
@@ -473,13 +551,13 @@ export const ProviderRegisterPage = () => {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className="block mb-1.5 text-sm font-semibold text-gray-700">Banco</label>
-                    <input name="bank" value={formData.bank} onChange={handleChange}
+                    <input name="bank" value={formData.bank} maxLength={LIMITS.bank} onChange={handleChange}
                       placeholder="Nombre del banco" className={inputClass('bank')}/>
                     <FieldError field="bank"/>
                   </div>
                   <div>
                     <label className="block mb-1.5 text-sm font-semibold text-gray-700">Sucursal</label>
-                    <input name="bank_branch" value={formData.bank_branch} onChange={handleChange}
+                    <input name="bank_branch" value={formData.bank_branch} maxLength={LIMITS.bank_branch} onChange={handleChange}
                       placeholder="Sucursal" className={inputClass('bank_branch')}/>
                     <FieldError field="bank_branch"/>
                   </div>
@@ -488,21 +566,21 @@ export const ProviderRegisterPage = () => {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className="block mb-1.5 text-sm font-semibold text-gray-700">No. de Cuenta</label>
-                    <input name="account_number" value={formData.account_number} onChange={handleChange}
+                    <input name="account_number" value={formData.account_number} maxLength={LIMITS.account_number} onChange={handleChange}
                       placeholder="Número de cuenta" className={`${inputClass('account_number')} font-mono`}/>
                     <FieldError field="account_number"/>
                   </div>
                   <div>
                     <label className="block mb-1.5 text-sm font-semibold text-gray-700">CLABE</label>
-                    <input name="clabe" value={formData.clabe} onChange={handleChange}
-                      placeholder="18 dígitos" maxLength={18} className={`${inputClass('clabe')} font-mono`}/>
+                    <input name="clabe" value={formData.clabe} maxLength={LIMITS.clabe} onChange={handleChange}
+                      placeholder="18 dígitos" inputMode="numeric" className={`${inputClass('clabe')} font-mono`}/>
                     <FieldError field="clabe"/>
                   </div>
                 </div>
 
                 <div>
                   <label className="block mb-1.5 text-sm font-semibold text-gray-700">Observaciones</label>
-                  <textarea name="observations" value={formData.observations} onChange={handleChange} rows={3}
+                  <textarea name="observations" value={formData.observations} maxLength={LIMITS.observations} onChange={handleChange} rows={3}
                     placeholder="Información adicional que quieras compartir..."
                     className={`${inputClass('observations')} resize-none`}/>
                   <FieldError field="observations"/>
@@ -537,34 +615,44 @@ export const ProviderRegisterPage = () => {
 
                 <div>
                   <label className="block mb-1.5 text-sm font-semibold text-gray-700">Nombre completo *</label>
-                  <input value={contact.name} onChange={e => setContact(c => ({ ...c, name: e.target.value }))}
-                    placeholder="Nombre del contacto" className={inputClass('contacts')}/>
+                  <input value={contact.name} onChange={handleContactChange('name')} maxLength={LIMITS.contact_name}
+                    placeholder="Nombre del contacto" className={inputClass('contacts.0.name')}/>
+                  <FieldError field="contacts.0.name"/>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className="block mb-1.5 text-sm font-semibold text-gray-700">Teléfono *</label>
-                    <input value={contact.phone} onChange={e => setContact(c => ({ ...c, phone: e.target.value }))}
-                      placeholder="33 1234 5678" className={inputClass('contacts')}/>
+                    <input value={contact.phone} onChange={handleContactChange('phone')} maxLength={LIMITS.contact_phone}
+                      placeholder="33 1234 5678" className={inputClass('contacts.0.phone')}/>
+                    <FieldError field="contacts.0.phone"/>
                   </div>
                   <div>
                     <label className="block mb-1.5 text-sm font-semibold text-gray-700">Correo *</label>
-                    <input type="email" value={contact.email} onChange={e => setContact(c => ({ ...c, email: e.target.value }))}
-                      placeholder="contacto@empresa.com" className={inputClass('contacts')}/>
+                    <input type="email" value={contact.email} onChange={handleContactChange('email')} maxLength={LIMITS.contact_email}
+                      placeholder="contacto@empresa.com" className={inputClass('contacts.0.email')}/>
+                    <FieldError field="contacts.0.email"/>
                   </div>
                 </div>
 
                 <FieldError field="contacts"/>
+              </div>
+            )}
 
-                {/* Error general */}
-                {mutation.isError && !Object.keys(errors).length && (
-                  <div className="flex items-start gap-3 p-4 border border-red-200 bg-red-50 rounded-xl">
-                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5"/>
-                    <p className="text-sm text-red-700">
-                      {mutation.error?.response?.data?.message || 'Error al registrar. Intenta de nuevo.'}
-                    </p>
+            {/* ✅ Error del servidor — visible en el paso donde quede el proveedor */}
+            {serverError && (
+              <div className="px-6 pb-6">
+                <div className="flex items-start gap-3 p-4 border border-red-200 bg-red-50 rounded-xl">
+                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5"/>
+                  <div className="text-sm text-red-700">
+                    <p className="font-semibold">{serverError.title}</p>
+                    {serverError.items.length > 0 && (
+                      <ul className="mt-1 space-y-0.5 list-disc list-inside">
+                        {serverError.items.map((msg, i) => <li key={i}>{msg}</li>)}
+                      </ul>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             )}
 
